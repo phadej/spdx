@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-module Distribution.SPDX.Parser (parseExpression, unsafeParseExpr) where
+module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
 
 #if !MIN_VERSION_base(4, 8, 0)
 import Control.Applicative
@@ -8,8 +8,8 @@ import Control.Applicative
 import Data.Char
 import Text.ParserCombinators.ReadP
 
-import Distribution.SPDX.Types
-import Distribution.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
+import Data.SPDX.Types
+import Data.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
 
 license :: ReadP LicenseId
 license = choice (map string licenseIdentifiers)

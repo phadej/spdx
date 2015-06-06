@@ -1,11 +1,11 @@
-module Distribution.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
+module Data.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
 
 import Data.Char
 import Data.List
 import Data.Maybe
 
-import Distribution.SPDX.Types
-import Distribution.SPDX.Licenses
+import Data.SPDX.Types
+import Data.SPDX.Licenses
 
 licenseRanges :: [[LicenseId]]
 licenseRanges = filter longerThanSingleton . map f $ prefixes

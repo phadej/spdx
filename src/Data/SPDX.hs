@@ -1,11 +1,11 @@
 -- |
--- Module      : Distribution.SPDX
+-- Module      : Data.SPDX
 -- Description : SPDX licenses and expression language
 -- Copyright   : (c) 2015 Oleg Grenrus
 -- License     : BSD3
 -- Maintainer  : Oleg Grenrus <oleg.grenrus@iki.fi>
 --
-module Distribution.SPDX (
+module Data.SPDX (
   -- * Types
     LicenseId
   , LicenseExceptionId
@@ -24,11 +24,11 @@ module Distribution.SPDX (
   , satisfies
   ) where
 
-import Distribution.SPDX.Types
-import Distribution.SPDX.Ranges
-import Distribution.SPDX.Licenses
-import Distribution.SPDX.Parser
-import Distribution.SPDX.LatticeSyntax
+import Data.SPDX.Types
+import Data.SPDX.Ranges
+import Data.SPDX.Licenses
+import Data.SPDX.Parser
+import Data.SPDX.LatticeSyntax
 
 data Lic = Lic (Either LicenseRef String) (Maybe String)
   deriving (Eq, Ord, Show, Read)

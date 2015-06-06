@@ -5,8 +5,8 @@ import Data.List
 import Test.Tasty
 import Test.Tasty.QuickCheck as QC
 
-import Distribution.SPDX
-import Distribution.SPDX.LatticeSyntax
+import Data.SPDX
+import Data.SPDX.LatticeSyntax
 
 main :: IO ()
 main = defaultMain tests

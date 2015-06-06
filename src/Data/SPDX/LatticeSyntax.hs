@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 -- |
--- Module      : Distribution.SPDX.LatticeSyntax
+-- Module      : Data.SPDX.LatticeSyntax
 -- Description : General lattice tools
 -- Copyright   : (c) 2015 Oleg Grenrus
 -- License     : BSD3
@@ -13,7 +13,7 @@
 -- Inspired by <http://www.well-typed.com/blog/2014/12/simple-smt-solver/ Simple SMT Solver>.
 --
 -- In future this module will probably be moved into separate package.
-module Distribution.SPDX.LatticeSyntax (LatticeSyntax(..), dual, freeVars, equivalent, preorder, satisfiable) where
+module Data.SPDX.LatticeSyntax (LatticeSyntax(..), dual, freeVars, equivalent, preorder, satisfiable) where
 
 import Control.Applicative
 import Control.Monad

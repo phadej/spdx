@@ -1,6 +1,6 @@
-module Distribution.SPDX.Licenses (LicenseId, LicenseExceptionId, licenseIdentifiers, licenseExceptions) where
+module Data.SPDX.Licenses (LicenseId, LicenseExceptionId, licenseIdentifiers, licenseExceptions) where
 
-import Distribution.SPDX.Types
+import Data.SPDX.Types
 
 import Data.List
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Distribution.SPDX.Types where
+module Data.SPDX.Types where
 
 import Data.Data
 import GHC.Generics
