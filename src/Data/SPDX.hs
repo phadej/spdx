@@ -8,11 +8,16 @@
 module Data.SPDX (
   -- * Types
     LicenseId
+  , getLicenseId
   , LicenseExceptionId
+  , getLicenseExceptionId
   , LicenseRef(..)
   , LicenseExpression(..)
   -- * Data
+  , licenses
   , licenseIdentifiers
+  , mkLicenseId
+  , isOsiApproved
   , licenseExceptions
   -- ** Ranges
   , licenseRanges
@@ -30,7 +35,7 @@ import Data.SPDX.Licenses
 import Data.SPDX.Parser
 import Data.SPDX.LatticeSyntax
 
-data Lic = Lic (Either LicenseRef String) (Maybe String)
+data Lic = Lic (Either LicenseRef LicenseId) (Maybe LicenseExceptionId)
   deriving (Eq, Ord, Show, Read)
 
 exprToLSLic :: LicenseExpression -> LatticeSyntax Lic

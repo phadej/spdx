@@ -35,16 +35,26 @@ units = testGroup "Unit tests" [ simpleUnits
                                , rangeUnit
                                ]
 
-simpleExprGen :: Gen String
+simpleExprGen :: Gen LicenseId
 simpleExprGen = elements licenseIdentifiers
 
 latticeSyntaxGen :: Gen (LatticeSyntax Char)
 latticeSyntaxGen = sized gen
-  where var = elements "abcdef"
-        gen 0 = LVar <$> var
-        gen n = oneof [ LVar <$> var
+  where var   = LVar <$> elements "abcdef"
+        gen 0 = var
+        gen n = oneof [ var
                       , LMeet <$> gen' <*> gen'
                       , LJoin <$> gen' <*> gen'
+                      ]
+          where gen' = gen (n `div` 2)
+
+exprGen :: Gen LicenseExpression
+exprGen = sized gen
+  where sim   = ELicense <$> arbitrary <*> (Right <$> simpleExprGen) <*> (pure Nothing)
+        gen 0 = sim
+        gen n = oneof [ sim
+                      , EDisjunction <$> gen' <*> gen'
+                      , EConjunction <$> gen' <*> gen'
                       ]
           where gen' = gen (n `div` 2)
 
@@ -70,7 +80,7 @@ compositeUnits = testGroup "Composite License Expressions"
   ]
 
 rangeUnit :: TestTree
-rangeUnit = QC.testProperty "calculated license ranges" $ once $ property $ sort licenseRanges == sort ranges
+rangeUnit = QC.testProperty "calculated license ranges" $ once $ property $ sort (map (map getLicenseId) licenseRanges) == sort ranges
 
 lsProps :: TestTree
 lsProps = testGroup "LatticeSyntax"
@@ -82,13 +92,32 @@ lsProps = testGroup "LatticeSyntax"
   , QC.testProperty "preorder reflexive" $ forAll latticeSyntaxGen $ \a -> a `preorder` a
   ]
 
+osiLicenseIds :: [LicenseId]
+osiLicenseIds = filter isOsiApproved licenseIdentifiers
+
+osiLicenseExpr :: LicenseExpression
+osiLicenseExpr = foldr1 EConjunction $ map (\l -> ELicense False (Right l) Nothing) osiLicenseIds
+
+isOsiApprovedExpr :: LicenseExpression -> Bool
+isOsiApprovedExpr (ELicense _ (Left _) _) = False
+isOsiApprovedExpr (ELicense _ _ (Just _)) = False
+isOsiApprovedExpr (ELicense False (Right e) Nothing) = isOsiApproved e
+isOsiApprovedExpr (ELicense True (Right e2) Nothing) = any isOsiApproved $ lookupLicenseRange e2
+isOsiApprovedExpr (EConjunction e1 e2) = isOsiApprovedExpr e1 && isOsiApprovedExpr e2
+isOsiApprovedExpr (EDisjunction e1 e2) = isOsiApprovedExpr e1 || isOsiApprovedExpr e2
+
+isOsiApprovedExpr' :: LicenseExpression -> Bool
+isOsiApprovedExpr' e = e `satisfies` osiLicenseExpr
+
 qcProps :: TestTree
 qcProps = testGroup "By Quickcheck"
-  [ QC.testProperty "licence identifiers are valid licenses" $ forAll simpleExprGen $ valid
+  [ QC.testProperty "licence identifiers are valid licenses" $ forAll simpleExprGen $ valid . getLicenseId
+  , QC.testProperty "satisfies osi checked" $ forAll exprGen $
+      \e -> isOsiApprovedExpr e == isOsiApprovedExpr' e
   , lsProps
   ]
 
-ranges :: [[LicenseId]]
+ranges :: [[String]]
 ranges = [
   [
     "AFL-1.1",

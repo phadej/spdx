@@ -65,7 +65,7 @@ equivalent a b = all (uncurry (==)) . runEval $ p
 
 -- | Test for preorder.
 --
--- @ a ≤ b ⇔ a ∨ b ≡ b ⇔ a ≡ a ∧ b@
+-- @ a ≤ b ⇔ a ∨ b ≡ b ⇔ a ≡ a ∧ b @
 --
 -- >>> preorder (LVar 'a' `LMeet` LVar 'b') (LVar 'a')
 -- True
@@ -88,8 +88,8 @@ runEval act = evalStateT (unEval act) []
 evalLattice :: Eq v => LatticeSyntax v -> Eval v Bool
 evalLattice (LVar v)    = guess v
 evalLattice (LBound b)  = return b
-evalLattice (LJoin a b) = (||) <$> evalLattice a <*> evalLattice b
-evalLattice (LMeet a b) = (&&) <$> evalLattice a <*> evalLattice b
+evalLattice (LJoin a b) = evalLattice a ||^ evalLattice b
+evalLattice (LMeet a b) = evalLattice a &&^ evalLattice b
 
 guess :: Eq v => v -> Eval v Bool
 guess v = Eval $ do
@@ -99,3 +99,28 @@ guess v = Eval $ do
     Just b  -> return b
     Nothing -> remember True <|> remember False
 
+-- From Control.Monad.Extra of extra
+
+-- | Like @if@, but where the test can be monadic.
+ifM :: Monad m => m Bool -> m a -> m a -> m a
+ifM b t f = do b' <- b; if b' then t else f
+
+-- | The lazy '||' operator lifted to a monad. If the first
+--   argument evaluates to 'True' the second argument will not
+--   be evaluated.
+--
+-- > Just True  ||^ undefined  == Just True
+-- > Just False ||^ Just True  == Just True
+-- > Just False ||^ Just False == Just False
+(||^) :: Monad m => m Bool -> m Bool -> m Bool
+(||^) a b = ifM a (return True) b
+
+-- | The lazy '&&' operator lifted to a monad. If the first
+--   argument evaluates to 'False' the second argument will not
+--   be evaluated.
+--
+-- > Just False &&^ undefined  == Just False
+-- > Just True  &&^ Just True  == Just True
+-- > Just True  &&^ Just False == Just False
+(&&^) :: Monad m => m Bool -> m Bool -> m Bool
+(&&^) a b = ifM a b (return False)
