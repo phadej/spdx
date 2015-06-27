@@ -109,11 +109,14 @@ isOsiApprovedExpr (EDisjunction e1 e2) = isOsiApprovedExpr e1 || isOsiApprovedEx
 isOsiApprovedExpr' :: LicenseExpression -> Bool
 isOsiApprovedExpr' e = e `satisfies` osiLicenseExpr
 
+scaleGen :: (Int -> Int) -> Gen a -> Gen a
+scaleGen f g = sized (\n -> resize (f n) g)
+
 qcProps :: TestTree
 qcProps = testGroup "By Quickcheck"
   [ QC.testProperty "licence identifiers are valid licenses" $ forAll simpleExprGen $ valid . getLicenseId
-  , QC.testProperty "satisfies osi checked" $ forAll exprGen $
-      \e -> isOsiApprovedExpr e == isOsiApprovedExpr' e
+  , QC.testProperty "satisfies osi checked" $ forAll (scaleGen (`div` 2) exprGen) $
+      \e -> isOsiApprovedExpr e == isOsiApprovedExpr' e -- Skip
   , lsProps
   ]
 
