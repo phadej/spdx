@@ -1,5 +1,9 @@
 {-# LANGUAGE CPP #-}
-module Distribution.SPDX.Parser (parseExpression, unsafeParseExpr) where
+module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
+
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 0
+#endif
 
 #if !MIN_VERSION_base(4, 8, 0)
 import Control.Applicative
@@ -8,14 +12,16 @@ import Control.Applicative
 import Data.Char
 import Text.ParserCombinators.ReadP
 
-import Distribution.SPDX.Types
-import Distribution.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
+import Data.SPDX.Types
+import Data.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
 
 license :: ReadP LicenseId
-license = choice (map string licenseIdentifiers)
+license = choice (map f licenseIdentifiers)
+  where f l = l <$ string (getLicenseId l)
 
 licenseException :: ReadP LicenseExceptionId
-licenseException = choice (map string licenseExceptions)
+licenseException = choice (map f licenseExceptions)
+  where f l = l <$ string (getLicenseExceptionId l)
 
 elicense :: ReadP LicenseExpression
 elicense = (\l -> ELicense False (Right l) Nothing) <$> license
@@ -70,7 +76,7 @@ expression = skipSpaces *> disjunction
 -- | Parse SPDX License Expression
 --
 -- >>> parseExpression "LGPL-2.1 OR MIT"
--- [EDisjunction (ELicense False "LGPL-2.1" Nothing) (ELicense False "MIT" Nothing)]
+-- [EDisjunction (ELicense False (Right (LicenseId "LGPL-2.1")) Nothing) (ELicense False (Right (LicenseId "MIT")) Nothing)]
 parseExpression :: String -> [LicenseExpression]
 parseExpression = map fst . readP_to_S (expression <* skipSpaces <* eof)
 

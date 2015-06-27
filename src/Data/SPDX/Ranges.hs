@@ -1,26 +1,26 @@
-module Distribution.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
+module Data.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
 
 import Data.Char
 import Data.List
 import Data.Maybe
 
-import Distribution.SPDX.Types
-import Distribution.SPDX.Licenses
+import Data.SPDX.Types
+import Data.SPDX.Licenses
 
 licenseRanges :: [[LicenseId]]
 licenseRanges = filter longerThanSingleton . map f $ prefixes
-  where f p = filter (\l -> p `isPrefixOf` l && restIsNumber l p) licenseIdentifiers
+  where f p = filter (\l -> p `isPrefixOf` getLicenseId l && restIsNumber (getLicenseId l) p) licenseIdentifiers
 
 -- | Lookup newer licenses we know about
 --
--- >>> lookupLicenseRange "MIT"
--- ["MIT"]
+-- >>> lookupLicenseRange $ fromJust $ mkLicenseId "MIT"
+-- [LicenseId "MIT"]
 --
--- >>> lookupLicenseRange "GPL-2.0"
--- ["GPL-2.0","GPL-3.0"]
+-- >>> lookupLicenseRange $ fromJust $ mkLicenseId "GPL-2.0"
+-- [LicenseId "GPL-2.0",LicenseId "GPL-3.0"]
 --
--- >>> lookupLicenseRange "LGPL-2.0"
--- ["LGPL-2.0","LGPL-2.1","LGPL-3.0"]
+-- >>> lookupLicenseRange $ fromJust $ mkLicenseId "LGPL-2.0"
+-- [LicenseId "LGPL-2.0",LicenseId "LGPL-2.1",LicenseId "LGPL-3.0"]
 lookupLicenseRange :: LicenseId -> [LicenseId]
 lookupLicenseRange l = fromMaybe [l] $ lookup l ranges'
 
@@ -39,7 +39,7 @@ pref :: String -> String
 pref = reverse . dropWhile (/= '-') . reverse
 
 prefixes :: [String]
-prefixes = nub (filter (not . null) $ map pref licenseIdentifiers)
+prefixes = nub (filter (not . null) $ map (pref . getLicenseId) licenseIdentifiers)
 
 longerThanSingleton :: [a] -> Bool
 longerThanSingleton []      = False
