@@ -15,6 +15,14 @@ import Text.ParserCombinators.ReadP
 import Data.SPDX.Types
 import Data.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
 
+#if !MIN_VERSION_base(4,6,0)
+import Control.Monad
+
+instance Applicative ReadP where
+  pure = return
+  (<*>) = ap
+#endif
+
 license :: ReadP LicenseId
 license = choice (map f licenseIdentifiers)
   where f l = l <$ string (getLicenseId l)

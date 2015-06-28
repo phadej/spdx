@@ -37,6 +37,8 @@ library
   ghc-options:         -Wall
   build-depends:       base              >=4.5 && <4.9,
                        transformers      >=0.3 && <0.5
+  if impl(ghc >= 7.4 && < 7.5)
+    build-depends: ghc-prim
 
 test-suite test
   type:                exitcode-stdio-1.0
