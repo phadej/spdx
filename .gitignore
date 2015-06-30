@@ -5,3 +5,6 @@ Thumbs.db
 # Cabal junk
 dist/
 
+# Stack junk
+.stack-work/
+

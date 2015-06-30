@@ -1,13 +1,12 @@
 module Main (main) where
 
-import Control.Applicative
 import Data.List
 import Data.Maybe
 import Data.Traversable
 import Text.XML.Light
 
 simplify :: Element -> [[[String]]]
-simplify el = 
+simplify el =
   let worksheets = filter isWorksheetElement $ childrenElements el
       Just tables = traverse tableFromWorksheet worksheets
   in map tableElements tables
@@ -38,7 +37,7 @@ extractData el = maybe "" id $ do dataEl <- listToMaybe . filter (isElement "Dat
                                   text <- textContent textEl
                                   return text
 
-tableElements :: Element -> [[String]] 
+tableElements :: Element -> [[String]]
 tableElements = map cells . filter (isElement "Row") . childrenElements
   where cells = map extractData . filter (isElement "Cell") . childrenElements
 
