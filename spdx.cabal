@@ -1,5 +1,5 @@
 name:                spdx
-version:             0.1.1.0
+version:             0.1.2.0
 synopsis:            SPDX license expression language
 description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.0.pdf SPDX> related functionality.
 homepage:            https://github.com/phadej/spdx
