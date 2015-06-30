@@ -5,7 +5,7 @@ description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.
 homepage:            https://github.com/phadej/spdx
 license:             BSD3
 license-file:        LICENSE
-author:              Oleg Grenrus
+author:              Oleg Grenrus <oleg.grenrus@iki.fi>
 maintainer:          Oleg Grenrus <oleg.grenrus@iki.fi>
 copyright:           (c) 2015 Oleg Grenrus
 category:            Data
