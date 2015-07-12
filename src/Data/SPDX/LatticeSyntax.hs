@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE Safe #-}
 -- |
 -- Module      : Data.SPDX.LatticeSyntax
 -- Description : General lattice tools
@@ -76,11 +76,27 @@ preorder :: Eq a => LatticeSyntax a -> LatticeSyntax a -> Bool
 preorder a b = (a `LJoin` b) `equivalent` b
 
 -- | Return `True` if for some variable assigment expression evaluates to `True`.
-satisfiable :: Eq a => LatticeSyntax a -> Bool 
+satisfiable :: Eq a => LatticeSyntax a -> Bool
 satisfiable = or . runEval . evalLattice
 
 newtype Eval v a = Eval { unEval :: StateT [(v, Bool)] [] a }
-  deriving (Functor, Applicative, Alternative, Monad, MonadPlus)
+  deriving (Functor)
+
+instance Applicative (Eval v) where
+  pure = return
+  (<*>) = ap
+
+instance Alternative (Eval v) where
+  empty = mzero
+  (<|>) = mplus
+
+instance Monad (Eval v) where
+  return = Eval . return
+  Eval m >>= k = Eval $ m >>= unEval . k
+
+instance MonadPlus (Eval v) where
+  mzero = Eval mzero
+  Eval a `mplus` Eval b = Eval $ a `mplus` b
 
 runEval :: Eval v a -> [a]
 runEval act = evalStateT (unEval act) []

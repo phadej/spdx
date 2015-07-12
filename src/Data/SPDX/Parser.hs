@@ -1,3 +1,4 @@
+{-# LANGUAGE Safe #-}
 {-# LANGUAGE CPP #-}
 module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
 

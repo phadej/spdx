@@ -1,3 +1,4 @@
+{-# LANGUAGE Safe #-}
 module Data.SPDX.Licenses (
     licenses
   , licenseIdentifiers

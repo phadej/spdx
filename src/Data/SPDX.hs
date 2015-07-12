@@ -1,3 +1,4 @@
+{-# LANGUAGE Safe #-}
 -- |
 -- Module      : Data.SPDX
 -- Description : SPDX licenses and expression language

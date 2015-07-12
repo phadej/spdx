@@ -1,3 +1,4 @@
+{-# LANGUAGE Safe #-}
 module Data.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
 
 import Data.Char

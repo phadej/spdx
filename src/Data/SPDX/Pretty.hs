@@ -1,3 +1,4 @@
+{-# LANGUAGE Safe #-}
 -- | Parser inverse.
 module Data.SPDX.Pretty
   ( prettyLicenseId
