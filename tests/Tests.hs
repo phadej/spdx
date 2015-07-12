@@ -1,12 +1,14 @@
 module Main (main) where
 
-import Control.Applicative
-import Data.List
-import Test.Tasty
-import Test.Tasty.QuickCheck as QC
+import           Data.List
+import           Test.Tasty
+import           Test.Tasty.QuickCheck as QC
 
-import Data.SPDX
-import Data.SPDX.LatticeSyntax
+import           Data.SPDX
+import           Data.SPDX.LatticeSyntax (LatticeSyntax(..))
+import qualified Data.SPDX.LatticeSyntax as LS
+
+import           Generators
 
 main :: IO ()
 main = defaultMain tests
@@ -35,28 +37,10 @@ units = testGroup "Unit tests" [ simpleUnits
                                , rangeUnit
                                ]
 
-simpleExprGen :: Gen LicenseId
-simpleExprGen = elements licenseIdentifiers
-
-latticeSyntaxGen :: Gen (LatticeSyntax Char)
-latticeSyntaxGen = sized gen
-  where var   = LVar <$> elements "abcdef"
-        gen 0 = var
-        gen n = oneof [ var
-                      , LMeet <$> gen' <*> gen'
-                      , LJoin <$> gen' <*> gen'
-                      ]
-          where gen' = gen (n `div` 2)
-
-exprGen :: Gen LicenseExpression
-exprGen = sized gen
-  where sim   = ELicense <$> arbitrary <*> (Right <$> simpleExprGen) <*> (pure Nothing)
-        gen 0 = sim
-        gen n = oneof [ sim
-                      , EDisjunction <$> gen' <*> gen'
-                      , EConjunction <$> gen' <*> gen'
-                      ]
-          where gen' = gen (n `div` 2)
+-- | Like `equivalent`, but prints a counterexample when it fails.
+equivalentProp :: [LicenseExpression] -> [LicenseExpression] -> Property
+equivalentProp x y =
+  counterexample (show x ++ " /= " ++ show y) $ length x == length y && (and $ zipWith equivalent x y)
 
 simpleUnits :: TestTree
 simpleUnits = testGroup "Simple License Expressions"
@@ -85,11 +69,11 @@ rangeUnit = QC.testProperty "calculated license ranges" $ once $ property $ sort
 lsProps :: TestTree
 lsProps = testGroup "LatticeSyntax"
   [ QC.testProperty "a ≤ b ⇔ a ∨ b ≡ b ⇔ a ≡ a ∧ b" $ forAll latticeSyntaxGen $ \a -> forAll latticeSyntaxGen $ \b ->
-     let lhs = ((a `LJoin` b) `equivalent` b)
-         rhs = ((a `LMeet` b) `equivalent` a)
+     let lhs = ((a `LJoin` b) `LS.equivalent` b)
+         rhs = ((a `LMeet` b) `LS.equivalent` a)
      in label (show lhs) (lhs === rhs)
-  , QC.testProperty "equivalent reflexive" $ forAll latticeSyntaxGen $ \a -> a `equivalent` a
-  , QC.testProperty "preorder reflexive" $ forAll latticeSyntaxGen $ \a -> a `preorder` a
+  , QC.testProperty "equivalent reflexive" $ forAll latticeSyntaxGen $ \a -> a `LS.equivalent` a
+  , QC.testProperty "preorder reflexive" $ forAll latticeSyntaxGen $ \a -> a `LS.preorder` a
   ]
 
 osiLicenseIds :: [LicenseId]
@@ -109,15 +93,20 @@ isOsiApprovedExpr (EDisjunction e1 e2) = isOsiApprovedExpr e1 || isOsiApprovedEx
 isOsiApprovedExpr' :: LicenseExpression -> Bool
 isOsiApprovedExpr' e = e `satisfies` osiLicenseExpr
 
-scaleGen :: (Int -> Int) -> Gen a -> Gen a
-scaleGen f g = sized (\n -> resize (f n) g)
-
 qcProps :: TestTree
 qcProps = testGroup "By Quickcheck"
-  [ QC.testProperty "licence identifiers are valid licenses" $ forAll simpleExprGen $ valid . getLicenseId
-  , QC.testProperty "satisfies osi checked" $ forAll (scaleGen (`div` 2) exprGen) $
+  [ QC.testProperty "licence identifiers are valid licenses" $ forAll licenseIdGen $ valid . getLicenseId
+  , QC.testProperty "satisfies osi checked" $ forAll (scaleGen (`div` 3) exprGen) $
       \e -> isOsiApprovedExpr e == isOsiApprovedExpr' e -- Skip
   , lsProps
+  , parsePrettyProps
+  ]
+
+parsePrettyProps :: TestTree
+parsePrettyProps = testGroup "parse . pretty"
+  [ QC.testProperty "LicenseId" $ forAll licenseIdGen $ \i -> mkLicenseId (prettyLicenseId i) === Just i
+  , QC.testProperty "LicenseExpression"  $ forAllShrink (scaleGen (`div` 3) exprGen)  exprShrink $ \e -> parseExpression (prettyLicenseExpression e) `equivalentProp` [e]
+  , QC.testProperty "LicenseExpression'" $ forAllShrink (scaleGen (`div` 3) exprGen') exprShrink $ \e -> parseExpression (prettyLicenseExpression e) `equivalentProp` [e]
   ]
 
 ranges :: [[String]]
