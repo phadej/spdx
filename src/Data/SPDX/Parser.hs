@@ -5,10 +5,7 @@ module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
 #define MIN_VERSION_base(x,y,z) 0
 #endif
 
-#if !MIN_VERSION_base(4, 8, 0)
 import Control.Applicative
-#endif
-
 import Data.Char
 import Text.ParserCombinators.ReadP
 
@@ -21,6 +18,10 @@ import Control.Monad
 instance Applicative ReadP where
   pure = return
   (<*>) = ap
+
+instance Alternative ReadP where
+  empty = mzero
+  (<|>) = mplus
 #endif
 
 license :: ReadP LicenseId
@@ -31,24 +32,24 @@ licenseException :: ReadP LicenseExceptionId
 licenseException = choice (map f licenseExceptions)
   where f l = l <$ string (getLicenseExceptionId l)
 
+licenseRef :: ReadP LicenseRef
+licenseRef = l <|> d
+  where l = LicenseRef Nothing <$ string "LicenseRef-" <*> idString
+        d = (\docId licId -> LicenseRef (Just docId) licId) <$ string "DocumentRef-" <*> idString <* char ':' <* string "LicenseRef-" <*> idString
+
+mkLicense ::  ReadP (Either LicenseRef LicenseId) -> ReadP LicenseExpression
+mkLicense p = choice
+  [ (\l   -> ELicense False l Nothing)  <$> p
+  , (\l e -> ELicense False l (Just e)) <$> p <* skipSpaces1 <* string "WITH" <* skipSpaces1 <*> licenseException
+  , (\l   -> ELicense True  l Nothing)  <$> p <* char '+'
+  , (\l e -> ELicense True  l (Just e)) <$> p <* char '+' <* string " WITH " <*> licenseException
+  ]
+
 elicense :: ReadP LicenseExpression
-elicense = (\l -> ELicense False (Right l) Nothing) <$> license
-
-elicenseWith :: ReadP LicenseExpression
-elicenseWith = (\l e -> ELicense False (Right l) (Just e)) <$> license <* skipSpaces1 <* string "WITH" <* skipSpaces1 <*> licenseException
-
-elicenseAndNewer :: ReadP LicenseExpression
-elicenseAndNewer = (\l -> ELicense True (Right l) Nothing) <$> license <* char '+'
-
-elicenseWithAndNewer :: ReadP LicenseExpression
-elicenseWithAndNewer = (\l e -> ELicense True (Right l) (Just e)) <$> license <* char '+' <* string " WITH " <*> licenseException
+elicense = mkLicense (Right <$> license)
 
 elicenseRef :: ReadP LicenseExpression
-elicenseRef = (\licId -> ELicense False (Left $ LicenseRef Nothing licId) Nothing) <$ string "LicenseRef-" <*> idString
-
-elicenseDocRef :: ReadP LicenseExpression
-elicenseDocRef = f <$ string "DocumentRef-" <*> idString <* char ':' <* string "LicenseRef-" <*> idString
-  where f docId licId = ELicense False (Left $ LicenseRef (Just docId) licId) Nothing
+elicenseRef = mkLicense (Left <$> licenseRef)
 
 idString :: ReadP String
 idString = munch1 p
@@ -64,11 +65,7 @@ parens = between (char '(') (skipSpaces <* char ')')
 
 terminal :: ReadP LicenseExpression
 terminal = choice [ elicense
-                  , elicenseWith
-                  , elicenseAndNewer
-                  , elicenseWithAndNewer
                   , elicenseRef
-                  , elicenseDocRef
                   , parens expression
                   ]
 

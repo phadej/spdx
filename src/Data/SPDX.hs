@@ -25,15 +25,24 @@ module Data.SPDX (
   -- * Parsing
   , parseExpression
   , unsafeParseExpr
+  -- * Prettifying
+  -- | Inverse of parsing
+  , prettyLicenseId
+  , prettyLicenseExceptionId
+  , prettyLicenseRef
+  , prettyLicenseExpression
   -- * Logic
   , satisfies
+  , equivalent
   ) where
 
-import Data.SPDX.Types
-import Data.SPDX.Ranges
-import Data.SPDX.Licenses
-import Data.SPDX.Parser
-import Data.SPDX.LatticeSyntax
+import Data.SPDX.LatticeSyntax (LatticeSyntax(..))
+import qualified Data.SPDX.LatticeSyntax as LS
+import           Data.SPDX.Licenses
+import           Data.SPDX.Parser
+import           Data.SPDX.Pretty
+import           Data.SPDX.Ranges
+import           Data.SPDX.Types
 
 data Lic = Lic (Either LicenseRef LicenseId) (Maybe LicenseExceptionId)
   deriving (Eq, Ord, Show, Read)
@@ -67,4 +76,14 @@ exprToLSLic (EDisjunction a b) = LJoin (exprToLSLic a) (exprToLSLic b)
 satisfies :: LicenseExpression -- ^ package license
           -> LicenseExpression -- ^ license policy
           -> Bool
-satisfies a b = exprToLSLic b `preorder` exprToLSLic a
+satisfies a b = exprToLSLic b `LS.preorder` exprToLSLic a
+
+-- | Check wheather two 'LicenseExpression' are equivalent.
+--
+-- >>> unsafeParseExpr "(MIT AND GPL-2.0)" `equivalent` unsafeParseExpr "(GPL-2.0 AND MIT)"
+-- True
+--
+-- >>> unsafeParseExpr "MIT" `equivalent` unsafeParseExpr "MIT OR BSD-3-Clause"
+-- False
+equivalent :: LicenseExpression -> LicenseExpression -> Bool
+equivalent a b = exprToLSLic a `LS.equivalent` exprToLSLic b
