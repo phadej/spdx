@@ -48,6 +48,6 @@ test-suite test
   hs-source-dirs:      tests
   ghc-options:         -Wall
   build-depends:       base              >=4.5  && <4.9,
-                       tasty             >=0.10 && <0.11,
+                       tasty             >=0.10 && <0.12,
                        tasty-quickcheck  >=0.8  && <0.9,
                        spdx
