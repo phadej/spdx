@@ -1,5 +1,7 @@
-{-# LANGUAGE Safe #-}
 {-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ >= 701
+{-# LANGUAGE Safe #-}
+#endif
 module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
 
 #ifndef MIN_VERSION_base

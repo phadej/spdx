@@ -1,4 +1,7 @@
+{-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Safe #-}
+#endif
 -- |
 -- Module      : Data.SPDX
 -- Description : SPDX licenses and expression language
