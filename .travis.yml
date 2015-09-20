@@ -10,17 +10,18 @@ before_install:
 install:
 - if [ -f $HOME/.cabal/packages/hackage.haskell.org/00-index.tar.gz ]; then zcat $HOME/.cabal/packages/hackage.haskell.org/00-index.tar.gz
   > $HOME/.cabal/packages/hackage.haskell.org/00-index.tar; ls -l $HOME/.cabal/packages/hackage.haskell.org/;
-  fi; cabal update; sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config; cabal install
-  --only-dependencies --enable-tests --enable-benchmarks --dry -v > installplan.txt;
-  sed -i -e '1,/^Resolving /d' installplan.txt; cat installplan.txt; if diff -u installplan.txt
-  $HOME/.cabsnap/installplan.txt; then echo "cabal build-cache HIT"; rm -rfv .ghc;
-  cp -av $HOME/.cabsnap/ghc $HOME/.ghc; cp -av $HOME/.cabsnap/lib $HOME/.cabsnap/share
-  $HOME/.cabsnap/bin $HOME/.cabal/; else echo "cabal build-cache MISS"; rm -rf $HOME/.cabsnap;
-  mkdir -p $HOME/.ghc $HOME/.cabal/lib $HOME/.cabal/share $HOME/.cabal/bin; cabal
-  install --only-dependencies --enable-tests --enable-benchmarks; fi; if [ ! -d $HOME/.cabsnap
-  ]; then echo "snapshotting package-db to build-cache"; mkdir $HOME/.cabsnap; cp
-  -av $HOME/.ghc $HOME/.cabsnap/ghc; cp -av $HOME/.cabal/lib $HOME/.cabal/share $HOME/.cabal/bin
-  installplan.txt $HOME/.cabsnap/; fi;
+  fi; cabal update; sed -i 's/^jobs:/-- jobs:/' ${HOME}/.cabal/config; if [ -n "$STACKAGESNAPSHOT"
+  ]; then curl -O https://www.stackage.org/$STACKAGESNAPSHOT/cabal.config; fi; cabal
+  install --only-dependencies --enable-tests --enable-benchmarks --dry -v > installplan.txt;
+  sed -i -e '1,/^Resolving /d' installplan.txt; cat installplan.txt; if diff -u $HOME/.cabsnap/installplan.txt
+  installplan.txt; then echo "cabal build-cache HIT"; rm -rfv .ghc; cp -av $HOME/.cabsnap/ghc
+  $HOME/.ghc; cp -av $HOME/.cabsnap/lib $HOME/.cabsnap/share $HOME/.cabsnap/bin $HOME/.cabal/;
+  else echo "cabal build-cache MISS"; rm -rf $HOME/.cabsnap; mkdir -p $HOME/.ghc $HOME/.cabal/lib
+  $HOME/.cabal/share $HOME/.cabal/bin; cabal install --only-dependencies --enable-tests
+  --enable-benchmarks; fi; if [ ! -d $HOME/.cabsnap ]; then echo "snapshotting package-db
+  to build-cache"; mkdir $HOME/.cabsnap; cp -av $HOME/.ghc $HOME/.cabsnap/ghc; cp
+  -av $HOME/.cabal/lib $HOME/.cabal/share $HOME/.cabal/bin installplan.txt $HOME/.cabsnap/;
+  fi;
 script:
 - if [ -f configure.ac ]; then autoreconf -i; fi
 - cabal configure --enable-tests --enable-benchmarks -v2
@@ -63,16 +64,36 @@ matrix:
         - ghc-7.8.4
         - libgmp-dev
     compiler: ! ': # ghc-7.8.4 cabal-1.18'
-  - env: GHCVER=7.10.1 CABALVER=1.22
+  - env: GHCVER=7.10.2 CABALVER=1.22
     addons:
       apt:
         sources:
         - hvr-ghc
         packages:
         - cabal-install-1.22
-        - ghc-7.10.1
+        - ghc-7.10.2
         - libgmp-dev
-    compiler: ! ': # ghc-7.10.1 cabal-1.22'
+    compiler: ! ': # ghc-7.10.2 cabal-1.22'
+  - env: GHCVER=7.8.4 CABALVER=1.18 STACKAGESNAPSHOT=lts-2.22
+    addons:
+      apt:
+        sources:
+        - hvr-ghc
+        packages:
+        - cabal-install-1.18
+        - ghc-7.8.4
+        - libgmp-dev
+    compiler: ! ': # ghc-7.8.4 cabal-1.18 lts-2.22'
+  - env: GHCVER=7.10.2 CABALVER=1.22 STACKAGESNAPSHOT=lts-3.5
+    addons:
+      apt:
+        sources:
+        - hvr-ghc
+        packages:
+        - cabal-install-1.22
+        - ghc-7.10.2
+        - libgmp-dev
+    compiler: ! ': # ghc-7.10.2 cabal-1.22 lts-3.5'
   - env: GHCVER=head CABALVER=1.22
     addons:
       apt:
