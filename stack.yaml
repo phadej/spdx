@@ -1,4 +1,4 @@
-resolver: lts-2.16
+resolver: lts-2.22
 packages:
 - '.'
 - './spdx-data'

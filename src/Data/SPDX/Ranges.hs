@@ -1,4 +1,7 @@
+{-# LANGUAGE CPP #-}
+#if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Safe #-}
+#endif
 module Data.SPDX.Ranges (licenseRanges, lookupLicenseRange) where
 
 import Data.Char

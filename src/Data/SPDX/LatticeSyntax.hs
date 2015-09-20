@@ -1,8 +1,15 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+#if __GLASGOW_HASKELL__ >= 701
+#if __GLASGOW_HASKELL__ >= 703
 {-# LANGUAGE Safe #-}
+#else
+{-# LANGUAGE Trustworthy #-}
+#endif
+#endif
 -- |
 -- Module      : Data.SPDX.LatticeSyntax
 -- Description : General lattice tools
@@ -80,7 +87,9 @@ satisfiable :: Eq a => LatticeSyntax a -> Bool
 satisfiable = or . runEval . evalLattice
 
 newtype Eval v a = Eval { unEval :: StateT [(v, Bool)] [] a }
-  deriving (Functor)
+
+instance Functor (Eval v) where
+  fmap = liftM
 
 instance Applicative (Eval v) where
   pure = return
