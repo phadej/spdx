@@ -87,7 +87,9 @@ satisfiable :: Eq a => LatticeSyntax a -> Bool
 satisfiable = or . runEval . evalLattice
 
 newtype Eval v a = Eval { unEval :: StateT [(v, Bool)] [] a }
-  deriving (Functor)
+
+instance Functor (Eval v) where
+  fmap = liftM
 
 instance Applicative (Eval v) where
   pure = return
