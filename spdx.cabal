@@ -28,7 +28,6 @@ library
                        Data.SPDX.Ranges
   other-extensions:    CPP
                        DeriveFunctor,
-                       GeneralizedNewtypeDeriving,
                        DeriveFoldable,
                        DeriveTraversable,
                        DeriveGeneric,
