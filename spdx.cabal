@@ -1,5 +1,5 @@
 name:                spdx
-version:             0.2.0.0
+version:             0.2.1.0
 synopsis:            SPDX license expression language
 description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.0.pdf SPDX> related functionality.
 homepage:            https://github.com/phadej/spdx
@@ -11,6 +11,7 @@ copyright:           (c) 2015 Oleg Grenrus
 category:            Data
 build-type:          Simple
 extra-source-files:  README.md
+tested-with:         GHC==7.4.2, GHC==7.6.3, GHC==7.8.4, GHC==7.10.2
 cabal-version:       >=1.10
 
 source-repository head
@@ -37,7 +38,7 @@ library
   ghc-options:         -Wall
   build-depends:       base              >=4.2 && <4.9,
                        transformers      >=0.3 && <0.5
-  if impl(ghc >=7.0 && <7.5)
+  if impl(ghc >=7.2 && <7.5)
     build-depends: ghc-prim
 
 
