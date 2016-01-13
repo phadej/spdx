@@ -8,7 +8,10 @@ module Data.SPDX.Parser (parseExpression, unsafeParseExpr) where
 #define MIN_VERSION_base(x,y,z) 0
 #endif
 
+#if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
+#endif
+
 import Control.Monad
 import Data.Char
 import Text.ParserCombinators.ReadP

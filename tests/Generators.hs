@@ -1,6 +1,14 @@
+{-# LANGUAGE CPP #-}
 module Generators where
 
-import           Control.Applicative
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 0
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
+
 import           Test.Tasty.QuickCheck as QC
 
 import           Data.SPDX
