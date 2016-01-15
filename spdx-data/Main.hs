@@ -1,8 +1,16 @@
+{-# LANGUAGE CPP #-}
 module Main (main) where
+
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 0
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
+import Data.Traversable
+#endif
 
 import Data.List
 import Data.Maybe
-import Data.Traversable
 import Text.XML.Light
 
 simplify :: Element -> [[[String]]]
