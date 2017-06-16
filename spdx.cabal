@@ -1,5 +1,5 @@
 name:                spdx
-version:             0.2.1.0
+version:             0.2.2.0
 synopsis:            SPDX license expression language
 description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.0.pdf SPDX> related functionality.
 homepage:            https://github.com/phadej/spdx
@@ -10,9 +10,15 @@ maintainer:          Oleg Grenrus <oleg.grenrus@iki.fi>
 copyright:           (c) 2015 Oleg Grenrus
 category:            Data
 build-type:          Simple
-extra-source-files:  README.md
-tested-with:         GHC==7.4.2, GHC==7.6.3, GHC==7.8.4, GHC==7.10.2
+extra-source-files:  README.md CHANGELOG.md
 cabal-version:       >=1.10
+tested-with:
+  GHC==7.4.2,
+  GHC==7.6.3,
+  GHC==7.8.4,
+  GHC==7.10.3,
+  GHC==8.0.2,
+  GHC==8.2.1
 
 source-repository head
   type: git
@@ -36,7 +42,7 @@ library
     other-extensions:  DeriveGeneric
   hs-source-dirs:      src/
   ghc-options:         -Wall
-  build-depends:       base              >=4.2 && <4.10,
+  build-depends:       base              >=4.2 && <4.11,
                        transformers      >=0.3 && <0.6
   if impl(ghc >=7.2 && <7.5)
     build-depends: ghc-prim
@@ -49,7 +55,7 @@ test-suite test
   default-language:    Haskell98
   hs-source-dirs:      tests
   ghc-options:         -Wall
-  build-depends:       base              >=4.5  && <4.10,
+  build-depends:       base              >=4.5  && <4.11,
                        tasty             >=0.10 && <0.12,
-                       tasty-quickcheck  >=0.8  && <0.9,
+                       tasty-quickcheck  >=0.8  && <0.10,
                        spdx
