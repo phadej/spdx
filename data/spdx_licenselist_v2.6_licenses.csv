@@ -1,0 +1,278 @@
+Full name of Exception,Exception Identifier,Source/url,Notes,Example of use,Exception Text,,changes for v2.1,changes for v2.2,changes for v2.3
+"389 Directory Server
+Exception",389-exception,http://directory.fedoraproject.org/wiki/GPL_Exception_License_Text,Specified to be associated with GPL-2.0.,"On Fedora List as ""Fedora Directory Server License""","This Program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; version 2 of the License.
+
+This Program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this Program; if not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
+
+In addition, as a special exception, Red Hat, Inc. gives You the additional right to link the code of this Program with code not covered under the GNU General Public License (""Non-GPL Code"") and to distribute linked combinations including the two, subject to the limitations in this paragraph. Non-GPL Code permitted under this exception must only link to the code of this Program through those well defined interfaces identified in the file named EXCEPTION found in the source code files (the ""Approved Interfaces""). The files of Non-GPL Code may instantiate templates or use macros or inline functions from the Approved Interfaces without causing the resulting work to be covered by the GNU General Public License. Only Red Hat, Inc. may make changes or additions to the list of Approved Interfaces. You must obey the GNU General Public License in all respects for all of the Program code and other code used in conjunction with the Program except the Non-GPL Code covered by this exception. If you modify this file, you may extend this exception to your version of the file, but you are not obligated to do so. If you do not wish to provide this exception without modification, you must delete this exception statement from your version and license this file solely under the GPL without exception.",,NEW,,
+Autoconf exception 2.0,Autoconf-exception-2.0,http://ac-archive.sourceforge.net/doc/copyright.html,"Typically used with GPL-2.0
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-2.0-with-autoconf-exception",GNU Autonconf 2.59 at http://ftp.gnu.org/gnu/autoconf/autoconf-2.59.tar.gz,"As a special exception, the Free Software Foundation gives unlimited permission to copy, distribute and modify the configure scripts that are the output of Autoconf. You need not follow the terms of the GNU General Public License when using or distributing such scripts, even though portions of the text of Autoconf appear in them. The GNU General Public License (GPL) does govern all other use of the material that constitutes the Autoconf program.
+
+Certain portions of the Autoconf source text are designed to be copied (in certain cases, depending on the input) into the output of Autoconf. We call these the ""data"" portions. The rest of the Autoconf source text consists of comments plus executable code that decides which of the data portions to output in any given case. We call these comments and executable code the ""non-data"" portions. Autoconf never copies any of the non-data portions into its output.
+
+This special exception to the GPL applies to versions of Autoconf released by the Free Software Foundation. When you make and distribute a modified version of Autoconf, you may extend this special exception to the GPL to apply to your modified version as well, *unless* your modified version has the potential to copy into its output some of the text that was the non-data portion of the version that you started with. (In other words, unless your change moves or copies text from the non-data portions to the data portions.) If your modification has such potential, you must delete any notice of this special exception to the GPL from your modified version.",,,,
+Autoconf exception 3.0,Autoconf-exception-3.0,http://www.gnu.org/licenses/autoconf-exception-3.0.html,"Typically used with GPL-3.0
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-3.0-with-autoconf-exception",http://www.gnu.org/software/autoconf/,"AUTOCONF CONFIGURE SCRIPT EXCEPTION
+
+Version 3.0, 18 August 2009
+Copyright © 2009 Free Software Foundation, Inc. <http://fsf.org/>
+
+Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
+
+This Exception is an additional permission under section 7 of the GNU General Public License, version 3 (""GPLv3""). It applies to a given file that bears a notice placed by the copyright holder of the file stating that the file is governed by GPLv3 along with this Exception.
+
+The purpose of this Exception is to allow distribution of Autoconf's typical output under terms of the recipient's choice (including proprietary).
+
+0. Definitions. 
+
+""Covered Code"" is the source or object code of a version of Autoconf that is a covered work under this License.
+
+""Normally Copied Code"" for a version of Autoconf means all parts of its Covered Code which that version can copy from its code (i.e., not from its input file) into its minimally verbose, non-debugging and non-tracing output.
+
+""Ineligible Code"" is Covered Code that is not Normally Copied Code.
+
+1. Grant of Additional Permission. 
+
+You have permission to propagate output of Autoconf, even if such propagation would otherwise violate the terms of GPLv3. However, if by modifying Autoconf you cause any Ineligible Code of the version you received to become Normally Copied Code of your modified version, then you void this Exception for the resulting covered work. If you convey that resulting covered work, you must remove this Exception in accordance with the second paragraph of Section 7 of GPLv3.
+
+2. No Weakening of Autoconf Copyleft. 
+
+The availability of this Exception does not imply any general presumption that third-party software is unaffected by the copyleft requirements of the license of Autoconf.",,,,
+Bison exception 2.2,Bison-exception-2.2,,"Typically used with GPL-2.0 or GPL-3.0
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-2.0-with-bison-exception",http://ftp.gnu.org/gnu/bison/bison-2.3.tar.gz,"Bison Exception
+
+As a special exception, you may create a larger work that contains part or all of the Bison parser skeleton and distribute that work under terms of your choice, so long as that work isn't itself a parser generator using the skeleton or a modified version thereof as a parser skeleton. Alternatively, if you modify or redistribute the parser skeleton itself, you may (at your option) remove this special exception, which will cause the skeleton and the resulting Bison output files to be licensed under the GNU General Public License without this special exception.
+
+This special exception was added by the Free Software Foundation in version 2.2 of Bison.",,,,
+Classpath exception 2.0,Classpath-exception-2.0,"http://www.gnu.org/software/classpath/license.html
+https://fedoraproject.org/wiki/Licensing/GPL_Classpath_Exception",This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-2.0-with-classpath-exception,"On Fedora List as ""GNU General Public License (no version), with Classpath exception"" and ""GNU General Public License v2.0 only, with Classpath exception"" and ""GNU General Public License v2.0 or later, with Classpath exception"" and ""GNU General Public License v3.0 only, with Classpath exception"" and ""GNU General Public License v3.0 or later, with Classpath exception""","Linking this library statically or dynamically with other modules is making a combined work based on this library. Thus, the terms and conditions of the GNU General Public License cover the whole combination.
+
+As a special exception, the copyright holders of this library give you permission to link this library with independent modules to produce an executable, regardless of the license terms of these independent modules, and to copy and distribute the resulting executable under terms of your choice, provided that you also meet, for each linked independent module, the terms and conditions of the license of that module. An independent module is a module which is not derived from or based on this library. If you modify this library, you may extend this exception to your version of the library, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.",,added Fedora url ,removed note re: 'Typically used...”,
+CLISP exception 2.0 ,CLISP-exception-2.0,http://sourceforge.net/p/clisp/clisp/ci/default/tree/COPYRIGHT,Typically used with GPL-2.0.,,"Summary:
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License version 2 as published by the Free Software Foundation; see file GNU-GPL.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+
+Note:
+
+This copyright does NOT cover user programs that run in CLISP and third-party packages not part of CLISP, if a) They only reference external symbols in CLISP's public packages that define API also provided by many other Common Lisp implementations (namely the packages COMMON-LISP, COMMON-LISP-USER, KEYWORD, CLOS, GRAY, EXT), i.e. if they don't rely on CLISP internals and would as well run in any other Common Lisp implementation. Or b) They only reference external symbols in CLISP's public packages that define API also provided by many other Common Lisp implementations (namely the packages COMMON-LISP, COMMON-LISP-USER, KEYWORD, CLOS, GRAY, EXT) and some external, not CLISP specific, symbols in third-party packages that are released with source code under a GPL compatible license and that run in a great number of Common Lisp implementations, i.e. if they rely on CLISP internals only to the extent needed for gaining some functionality also available in a great number of Common Lisp implementations. Such user programs are not covered by the term """"""""derived work"""""""" used in the GNU GPL. Neither is their compiled code, i.e. the result of compiling them by use of the function COMPILE-FILE. We refer to such user programs as """"""""independent work"""""""".
+
+You may copy and distribute memory image files generated by the function SAVEINITMEM, if it was generated only from CLISP and independent work, and provided that you accompany them, in the sense of section 3 of the GNU GPL, with the source code of CLISP - precisely the same CLISP version that was used to build the memory image -, the source or compiled code of the user programs needed to rebuild the memory image (source code for all the parts that are not independent work, see above), and a precise description how to rebuild the memory image from these.
+
+Foreign non-Lisp code that is linked with CLISP or loaded into CLISP through dynamic linking is not exempted from this copyright. I.e. such code, when distributed for use with CLISP, must be distributed under the GPL.",,NEW,,
+DigiRule FOSS License Exception,DigiRule-FOSS-exception,http://www.digirulesolutions.com/drupal/foss,Used with GPL-2.0,,"DigiRule Solutions’s FOSS License Exception Terms and Conditions
+
+1. Definitions.
+
+“Derivative Work” means a derivative work, as defined under applicable copyright law, formed entirely from the Program and one or more FOSS Applications.
+
+“FOSS Application” means a free and open source software application distributed subject to a license listed in the section below titled “FOSS License List.”
+
+“FOSS Notice” means a notice placed by DigiRule Solutions in a copy of the Client Libraries stating that such copy of the Client Libraries may be distributed under DigiRule Solutions's or FOSS License Exception.
+
+“Independent Work” means portions of the Derivative Work that are not derived from the Program and can reasonably be considered independent and separate works.
+
+“Program” means a copy of DigiRule Solutions’s Client Libraries that contain a FOSS Notice.
+
+2. A FOSS application developer (“you” or “your”) may distribute a Derivative Work provided that you and the Derivative Work meet all of the following conditions:
+
+     1. You obey the GPL in all respects for the Program and all portions (including modifications) of the Program included in the Derivative Work (provided that this condition does not apply to Independent Works);
+
+     2. The Derivative Work does not include any work licensed under the GPL other than the Program;
+
+     3. You distribute Independent Works subject to a license listed in the section below titled “FOSS License List”;
+
+     4. You distribute Independent Works in object code or executable form with the complete corresponding machine-readable source code on the same medium and under the same FOSS license applying to the object code or executable forms;
+
+     5. All works that are aggregated with the Program or the Derivative Work on a medium or volume of storage are not derivative works of the Program, Derivative Work or FOSS Application, and must reasonably be considered independent and separate works.
+
+3. DigiRule Solutions reserves all rights not expressly granted in these terms and conditions. If all of the above conditions are not met, then this FOSS License Exception does not apply to you or your Derivative Work.
+
+FOSS License List
+License Name Version(s)/Copyright Date
+Release Early Certified Software
+Academic Free License 2.0
+Apache Software License 1.0/1.1/2.0
+Apple Public Source License 2.0
+Artistic license From Perl 5.8.0
+BSD license “July 22 1999”
+Common Development and Distribution License (CDDL) 1.0
+Common Public License 1.0
+Eclipse Public License 1.0
+GNU Library or “Lesser” General Public License (LGPL) 2.0/2.1/3.0
+Jabber Open Source License 1.0
+MIT License (As listed in file MIT-License.txt) -
+Mozilla Public License (MPL) 1.0/1.1
+Open Software License 2.0
+OpenSSL license (with original SSLeay license) “2003” (“1998”)
+PHP License 3.0/3.01
+Python license (CNRI Python License) -
+Python Software Foundation License 2.1.1
+Sleepycat License “1999”
+University of Illinois/NCSA Open Source License -
+W3C License “2001”
+X11 License “2001”
+Zlib/libpng License -
+Zope Public License 2.0",,,NEW,
+eCos exception 2.0,eCos-exception-2.0,http://ecos.sourceware.org/license-overview.html,"Typically used with GPL-2.0
+
+Similar to Macro and Inlines Functions Exception
+","http://ecos.sourceware.org/license-overview.html
+","As a special exception, if other files instantiate templates or use macros or inline functions from this file, or you compile this file and link it with other works to produce a work based on this file, this file does not by itself cause the resulting work to be covered by the GNU General Public License. However the source code for this file must still be made available in accordance with section (3) of the GNU General Public License.
+
+This exception does not invalidate any other reasons why a work based on this file might be covered by the GNU General Public License.",,,,
+Fawkes Runtime Exception ,Fawkes-Runtime-exception,http://www.fawkesrobotics.org/about/license/,Combines the Classpath exception with the Macros and Inline Functions exception.,,"Linking this library statically or dynamically with other modules is making a combined work based on this library. Thus, the terms and conditions of the GNU General Public License cover the whole combination. As a special exception, the copyright holders of this library give you permission to link this library with independent modules to produce an executable, regardless of the license terms of these independent modules, and to copy and distribute the resulting executable under terms of your choice, provided that you also meet, for each linked independent module, the terms and conditions of the license of that module. An independent module is a module which is not derived from or based on this library. If you modify this library, you may extend this exception to your version of the library, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version. Additionally if other files instantiate templates or use macros or inline functions from this file, or you compile this file and link it with other files to produce an executable, this file does not by itself cause the resulting executable to be covered by the GNU General Public License. This exception does not however invalidate any other reasons why the executable file might be covered by the GNU General Public License.",,,NEW,
+FLTK exception,FLTK-exception,http://www.fltk.org/COPYING.php,Specified to be associated with LGPL-2.0,"On Fedora List as ""FLTK License""","The FLTK library and included programs are provided under the terms of the GNU Library General Public License (LGPL) with the following exceptions:
+
+Modifications to the FLTK configure script, config header file, and makefiles by themselves to support a specific platform do not constitute a modified or derivative work.
+
+The authors do request that such modifications be contributed to the FLTK project - send all contributions to ""fltk-bugs@fltk.org"".
+
+Widgets that are subclassed from FLTK widgets do not constitute a derivative work.
+
+Static linking of applications and widgets to the FLTK library does not constitute a derivative work and does not require the author to provide source code for the application or widget, use the shared FLTK libraries, or link their applications or widgets against a user-supplied version of FLTK.
+
+If you link the application or widget to a modified version of FLTK, then the changes to FLTK must be provided under the terms of the LGPL in sections 1, 2, and 4.
+
+You do not have to provide a copy of the FLTK license with programs that are linked to the FLTK library, nor do you have to identify the FLTK license in your program or documentation as required by section 6 of the LGPL.
+
+However, programs must still identify their use of FLTK. The following example statement can be included in user documentation to satisfy this requirement:
+
+[program/widget] is based in part on the work of the FLTK project (http://www.fltk.org).",,NEW,,
+Font exception 2.0,Font-exception-2.0,http://www.gnu.org/licenses/gpl-faq.html#FontException,"Typically used with GPL-2.0
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-2.0-with-font-exception","On Fedora list as 
+""GNU General Public License v2.0 only, with font embedding exception"" and 
+""GNU General Public License v2.0 or later, with font embedding exception"" and 
+""GNU General Public License v3.0 only, with font embedding exception"" and 
+""GNU General Public License v3.0 or later, with font embedding exception"" and 
+""GNU General Public License (no version), with font embedding exception"".","As a special exception, if you create a document which uses this font, and embed this font or unaltered portions of this font into the document, this font does not by itself cause the resulting document to be covered by the GNU General Public License. This exception does not however invalidate any other reasons why the document might be covered by the GNU General Public License. If you modify this font, you may extend this exception to your version of the font, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.",,,,
+FreeRTOS Exception 2.0,freertos-exception-2.0,http://www.freertos.org/a00114.html#exception,"Used with GPL 2.0, as specified at http://www.freertos.org/license.txt",,"Any FreeRTOS source code, whether modified or in its original release form, or whether in whole or in part, can only be distributed by you under the terms of the GNU General Public License plus this exception. An independent module is a module which is not derived from or based on FreeRTOS.
+
+EXCEPTION TEXT:
+
+Clause 1
+
+Linking FreeRTOS statically or dynamically with other modules is making a combined work based on FreeRTOS. Thus, the terms and conditions of the GNU General Public License cover the whole combination.
+
+As a special exception, the copyright holder of FreeRTOS gives you permission to link FreeRTOS with independent modules that communicate with FreeRTOS solely through the FreeRTOS API interface, regardless of the license terms of these independent modules, and to copy and distribute the resulting combined work under terms of your choice, provided that
+
+Every copy of the combined work is accompanied by a written statement that details to the recipient the version of FreeRTOS used and an offer by yourself to provide the FreeRTOS source code (including any modifications you may have made) should the recipient request it.
+
+The combined work is not itself an RTOS, scheduler, kernel or related product.
+
+The independent modules add significant and primary functionality to FreeRTOS and do not merely extend the existing functionality already present in FreeRTOS.
+
+Clause 2
+
+FreeRTOS may not be used for any competitive or comparative purpose, including the publication of any form of run time or compile time metric, without the express permission of Real Time Engineers Ltd. (this is the norm within the industry and is intended to ensure information accuracy).",,NEW,,
+GCC Runtime Library exception 2.0,GCC-exception-2.0,,"Typically used with GPL-2.0 or later.  Sometimes also referred to a ""linking exception.""
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-2.0-with-GCC-exception",,"In addition to the permissions in the GNU General Public License, the Free Software Foundation gives you unlimited permission to link the compiled version of this file into combinations with other programs, and to distribute those combinations without any restriction coming from the use of this file. (The General Public License restrictions do apply in other respects; for example, they cover modification of the file, and distribution when not linked into a combine executable.)",,added more in notes,,
+GCC Runtime Library exception 3.1,GCC-exception-3.1,http://www.gnu.org/licenses/gcc-exception-3.1.html,"Typically used with GPL-3.0
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/GPL-3.0-with-GCC-exception",,"GCC RUNTIME LIBRARY EXCEPTION 
+
+Version 3.1, 31 March 2009
+
+General information: http://www.gnu.org/licenses/gcc-exception.html 
+Copyright (C) 2009 Free Software Foundation, Inc. <http://fsf.org/>
+
+Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed. 
+This GCC Runtime Library Exception (""Exception"") is an additional permission under section 7 of the GNU General Public License, version 3 (""GPLv3""). It applies to a given file (the ""Runtime Library"") that bears a notice placed by the copyright holder of the file stating that the file is governed by GPLv3 along with this Exception.
+
+When you use GCC to compile a program, GCC may combine portions of certain GCC header files and runtime libraries with the compiled program. The purpose of this Exception is to allow compilation of non-GPL (including proprietary) programs to use, in this way, the header files and runtime libraries covered by this Exception.
+
+0. Definitions. 
+
+A file is an ""Independent Module"" if it either requires the Runtime Library for execution after a Compilation Process, or makes use of an interface provided by the Runtime Library, but is not otherwise based on the Runtime Library. 
+
+""GCC"" means a version of the GNU Compiler Collection, with or without modifications, governed by version 3 (or a specified later version) of the GNU General Public License (GPL) with the option of using any subsequent versions published by the FSF. 
+
+""GPL-compatible Software"" is software whose conditions of propagation, modification and use would permit combination with GCC in accord with the license of GCC.
+
+""Target Code"" refers to output from any compiler for a real or virtual target processor architecture, in executable form or suitable for input to an assembler, loader, linker and/or execution phase. Notwithstanding that, Target Code does not include data in any format that is used as a compiler intermediate representation, or used for producing a compiler intermediate representation. 
+
+The ""Compilation Process"" transforms code entirely represented in non-intermediate languages designed for human-written code, and/or in Java Virtual Machine byte code, into Target Code. Thus, for example, use of source code generators and preprocessors need not be considered part of the Compilation Process, since the Compilation Process can be understood as starting with the output of the generators or preprocessors.
+
+A Compilation Process is ""Eligible"" if it is done using GCC, alone or with other GPL-compatible software, or if it is done without using any work based on GCC. For example, using non-GPL-compatible Software to optimize any GCC intermediate representations would not qualify as an Eligible Compilation Process.
+
+1. Grant of Additional Permission. 
+
+You have permission to propagate a work of Target Code formed by combining the Runtime Library with Independent Modules, even if such propagation would otherwise violate the terms of GPLv3, provided that all Target Code was generated by Eligible Compilation Processes. You may then convey such a combination under terms of your choice, consistent with the licensing of the Independent Modules.
+
+2. No Weakening of GCC Copyleft. 
+
+The availability of this Exception does not imply any general presumption that third-party software is unaffected by the copyleft requirements of the license of GCC.",,,,
+GNU JavaMail exception,gnu-javamail-exception,http://www.gnu.org/software/classpathx/javamail/javamail.html,Used with GPL (any version),,"As a special exception, if you link this library with other files to produce an executable, this library does not by itself cause the resulting executable to be covered by the GNU General Public License. This exception does not however invalidate any other reasons why the executable file might be covered by the GNU General Public License.""",,NEW,,
+i2p GPL+Java Exception,i2p-gpl-java-exception,http://geti2p.net/en/get-involved/develop/licenses#java_exception,Used with GPL-2.0,,"In addition, as a special exception, <<var;name=licensor;original=XXXX;match=.+>> gives permission to link the code of this program with the proprietary Java implementation provided by Sun (or other vendors as well), and distribute linked combinations including the two. You must obey the GNU General Public License in all respects for all of the code used other than the proprietary Java implementation. If you modify this file, you may extend this exception to your version of the file, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.",,NEW,,
+Libtool Exception,Libtool-exception,http://git.savannah.gnu.org/cgit/libtool.git/tree/m4/libtool.m4,,https://www.gnu.org/software/libtool/,"As a special exception to the GNU General Public License, if you distribute this file as part of a program or library that is built using GNU Libtool, you may include this file under the same distribution terms that you use for the rest of that program.",,NEW,,
+LZMA exception,LZMA-exception,http://nsis.sourceforge.net/Docs/AppendixI.html#I.6,Used by the LZMA compression module for NSIS to apply an exception to CPL-1.0,,"I.6 Special exception for LZMA compression module
+
+Igor Pavlov and Amir Szekely, the authors of the LZMA compression module for NSIS, expressly permit you to statically or dynamically link your code (or bind by name) to the files from the LZMA compression module for NSIS without subjecting your linked code to the terms of the Common Public license version 1.0. Any modifications or additions to files from the LZMA compression module for NSIS, however, are subject to the terms of the Common Public License version 1.0.",,NEW,,
+Macros and Inline Functions Exception,mif-exception,http://www.scs.stanford.edu/histar/src/lib/cppsup/exception,Used with GPL-2.0.  Used by older versions of GCC. This is similar to the eCos Exception.,"http://dev.bertos.org/doxygen/
+https://www.threadingbuildingblocks.org/licensing 
+","As a special exception, you may use this file as part of a free software library without restriction. Specifically, if other files instantiate templates or use macros or inline functions from this file, or you compile this file and link it with other files to produce an executable, this file does not by itself cause the resulting executable to be covered by the GNU General Public License. This exception does not however invalidate any other reasons why the executable file might be covered by the GNU General Public License.",,NEW,,
+Nokia Qt LGPL exception 1.1,Nokia-Qt-exception-1.1,https://www.keepassx.org/dev/projects/keepassx/repository/revisions/b8dfb9cc4d5133e0f09cd7533d15a4f1c19a40f2/entry/LICENSE.NOKIA-LGPL-EXCEPTION,Used by Nokia Qt to apply an exception to LGPL-2.1,,"Nokia Qt LGPL Exception version 1.1
+
+As an additional permission to the GNU Lesser General Public License version 2.1, the object code form of a """"work that uses the Library"""" may incorporate material from a header file that is part of the Library. You may distribute such object code under terms of your choice, provided that: 
+ 
+     (i) the header files of the Library have not been modified; and  
+     (ii) the incorporated material is limited to numerical parameters, data structure layouts, accessors, macros, inline functions and templates; and 
+     (iii) you comply with the terms of Section 6 of the GNU Lesser General Public License version 2.1.
+
+Moreover, you may apply this exception to a modified version of the Library, provided that such modification does not involve copying material from the Library into the modified Library's header files unless such material is limited to 
+
+     (i) numerical parameters; 
+     (ii) data structure layouts; 
+     (iii) accessors; and 
+     (iv) small macros, templates and inline functions of five lines or less in length.
+
+Furthermore, you are not required to apply this additional permission to a modified version of the Library.",,NEW,,
+Open CASCADE Exception 1.0,OCCT-exception-1.0,http://www.opencascade.com/content/licensing,"Open CASCADE Technology version 6.7.0 and later are governed by (LGPL-2.1 with this exception.)
+
+A specific license (OCCT-PL) is applied to Open CASCADE Technology version 6.6.0 and earlier.",,"Open CASCADE Exception (version 1.0) to GNU LGPL version 2.1.
+
+The object code (i.e. not a source) form of a ""work that uses the Library"" can incorporate material from a header file that is part of the Library. As a special exception to the GNU Lesser General Public License version 2.1, you may distribute such object code incorporating material from header files provided with the Open CASCADE Technology libraries (including code of CDL generic classes) under terms of your choice, provided that you give prominent notice in supporting documentation to this code that it makes use of or is based on facilities provided by the Open CASCADE Technology software.",,,,NEW
+OpenVPN OpenSSL Exception,openvpn-openssl-exception,http://openvpn.net/index.php/license.html,Used with GPL-2.0+,,"Special exception for linking OpenVPN with OpenSSL:
+
+In addition, as a special exception, OpenVPN Technologies, Inc. gives permission to link the code of this program with the OpenSSL Library (or with modified versions of OpenSSL that use the same license as OpenSSL), and distribute linked combinations including the two. You must obey the GNU General Public License in all respects for all of the code used other than OpenSSL. If you modify this file, you may extend this exception to your version of the file, but you are not obligated to do so. If you do not wish to do so, delete this exception statement from your version.",,,NEW,
+Qwt exception 1.0,Qwt-exception-1.0,http://qwt.sourceforge.net/qwtlicense.html,Specified to be associated with LGPL-2.1,"On Fedora List as ""Qwt License 1.0""","Qwt License Version 1.0, 
+January 1, 2003 
+
+The Qwt library and included programs are provided under the terms of the GNU LESSER GENERAL PUBLIC LICENSE (LGPL) with the following exceptions: 
+
+1. Widgets that are subclassed from Qwt widgets do not constitute a derivative work. 
+
+2. Static linking of applications and widgets to the Qwt library does not constitute a derivative work and does not require the author to provide source code for the application or widget, use the shared Qwt libraries, or link their applications or widgets against a user-supplied version of Qwt. If you link the application or widget to a modified version of Qwt, then the changes to Qwt must be provided under the terms of the LGPL in sections 1, 2, and 4. 
+
+3. You do not have to provide a copy of the Qwt license with programs that are linked to the Qwt library, nor do you have to identify the Qwt license in your program or documentation as required by section 6 of the LGPL. 
+
+However, programs must still identify their use of Qwt. The following example statement can be included in user documentation to satisfy this requirement: [program/widget] is based in part on the work of the Qwt project (http://qwt.sf.net)."" ",,NEW,,
+U-Boot exception 2.0,u-boot-exception-2.0,http://git.denx.de/?p=u-boot.git;a=blob;f=Licenses/Exceptions,Used with GPL-2.0+,,"The U-Boot License Exception:
+
+Even though U-Boot in general is covered by the GPL-2.0/GPL-2.0+, this does *not* cover the so-called ""standalone"" applications that use U-Boot services by means of the jump table provided by U-Boot exactly for this purpose - this is merely considered normal use of U-Boot, and does *not* fall under the heading of ""derived work"".
+
+The header files ""include/image.h"" and ""arch/*/include/asm/u-boot.h"" define interfaces to U-Boot. Including these (unmodified) header files in another file is considered normal use of U-Boot, and does *not* fall under the heading of ""derived work"".
+-- Wolfgang Denk",,NEW,,
+WxWindows Library Exception 3.1,WxWindows-exception-3.1,http://www.opensource.org/licenses/WXwindows,"Used with GPL-2.0+
+
+This exception should be used instead of the deprecated http://spdx.org/licenses/WXwindows",,"EXCEPTION NOTICE
+
+1. As a special exception, the copyright holders of this library give permission for additional uses of the text contained in this release of the library as licenced under the wxWindows Library Licence, applying either version 3.1 of the Licence, or (at your option) any later version of the Licence as published by the copyright holders of version 3.1 of the Licence document.
+
+2. The exception is that you may use, copy, link, modify and distribute under your own terms, binary object code versions of works based on the Library.
+
+3. If you copy code from files distributed under the terms of the GNU General Public Licence or the GNU Library General Public Licence into a copy of this library, as this licence permits, the exception does not apply to the code that you add in this way. To avoid misleading anyone as to the status of such modified files, you must delete this exception notice from such code and/or adjust the licensing conditions notice accordingly.
+
+4. If you write modifications of your own for this library, it is your choice whether to permit this exception to apply to your modifications. If you do not wish that, you must delete the exception notice from such code and/or adjust the licensing conditions notice accordingly.",,,,
+,,,,,,,,,
+,,,,,,,10,3,1

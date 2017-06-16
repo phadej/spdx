@@ -16,17 +16,33 @@ import Data.Maybe
 import Data.SPDX.Types
 
 licenseExceptions :: [LicenseExceptionId]
-licenseExceptions = map LicenseExceptionId [
-  "Autoconf-exception-2.0",
-  "Autoconf-exception-3.0",
-  "Bison-exception-2.2",
-  "Classpath-exception-2.0",
-  "eCos-exception-2.0",
-  "Font-exception-2.0",
-  "GCC-exception-2.0",
-  "GCC-exception-3.1",
-  "WxWindows-exception-3.1"
-  ]
+licenseExceptions = map LicenseExceptionId
+    [ "389-exception"
+    , "Autoconf-exception-2.0"
+    , "Autoconf-exception-3.0"
+    , "Bison-exception-2.2"
+    , "Classpath-exception-2.0"
+    , "CLISP-exception-2.0"
+    , "DigiRule-FOSS-exception"
+    , "eCos-exception-2.0"
+    , "Fawkes-Runtime-exception"
+    , "FLTK-exception"
+    , "Font-exception-2.0"
+    , "freertos-exception-2.0"
+    , "GCC-exception-2.0"
+    , "GCC-exception-3.1"
+    , "gnu-javamail-exception"
+    , "i2p-gpl-java-exception"
+    , "Libtool-exception"
+    , "LZMA-exception"
+    , "mif-exception"
+    , "Nokia-Qt-exception-1.1"
+    , "OCCT-exception-1.0"
+    , "openvpn-openssl-exception"
+    , "Qwt-exception-1.0"
+    , "u-boot-exception-2.0"
+    , "WxWindows-exception-3.1"
+    ]
 
 -- | A list of SPDX licenses identifiers.
 --
@@ -58,7 +74,8 @@ isOsiApproved l = trdOf3 $ fromJust $ find ((==l) . fstOf3) licenses
 -- See <http://spdx.org/licenses/>.
 licenses :: [(LicenseId, String, Bool)]
 licenses =
-  [ (LicenseId "AAL", "Attribution Assurance License", True)
+  [ (LicenseId "0BSD", "BSD Zero Clause License", True)
+  , (LicenseId "AAL", "Attribution Assurance License", True)
   , (LicenseId "ADSL", "Amazon Digital Services License", False)
   , (LicenseId "AFL-1.1", "Academic Free License v1.1", True)
   , (LicenseId "AFL-1.2", "Academic Free License v1.2", True)
@@ -96,9 +113,13 @@ licenses =
   , (LicenseId "BSD-3-Clause-Attribution", "BSD with attribution", False)
   , (LicenseId "BSD-3-Clause-Clear", "BSD 3-clause Clear License", False)
   , (LicenseId "BSD-3-Clause-LBNL", "Lawrence Berkeley National Labs BSD variant license", False)
+  , (LicenseId "BSD-3-Clause-No-Nuclear-License", "BSD 3-Clause No Nuclear License", False)
+  , (LicenseId "BSD-3-Clause-No-Nuclear-License-2014", "BSD 3-Clause No Nuclear License 2014", False)
+  , (LicenseId "BSD-3-Clause-No-Nuclear-Warranty", "BSD 3-Clause No Nuclear Warranty", False)
   , (LicenseId "BSD-4-Clause", "BSD 4-clause \"Original\" or \"Old\" License", False)
   , (LicenseId "BSD-4-Clause-UC", "BSD-4-Clause (University of California-Specific)", False)
   , (LicenseId "BSD-Protection", "BSD Protection License", False)
+  , (LicenseId "BSD-Source-Code", "BSD Source Code Attribution", False)
   , (LicenseId "BSL-1.0", "Boost Software License 1.0", True)
   , (LicenseId "Bahyph", "Bahyph License", False)
   , (LicenseId "Barr", "Barr License", False)
@@ -143,8 +164,10 @@ licenses =
   , (LicenseId "CECILL-1.0", "CeCILL Free Software License Agreement v1.0", False)
   , (LicenseId "CECILL-1.1", "CeCILL Free Software License Agreement v1.1", False)
   , (LicenseId "CECILL-2.0", "CeCILL Free Software License Agreement v2.0", False)
+  , (LicenseId "CECILL-2.1", "CeCILL Free Software License Agreement v2.1", True)
   , (LicenseId "CECILL-B", "CeCILL-B Free Software License Agreement", False)
   , (LicenseId "CECILL-C", "CeCILL-C Free Software License Agreement", False)
+  , (LicenseId "CNRI-Jython", "CNRI Jython License", False)
   , (LicenseId "CNRI-Python", "CNRI Python License", True)
   , (LicenseId "CNRI-Python-GPL-Compatible", "CNRI Python Open Source GPL Compatible License Agreement", False)
   , (LicenseId "CPAL-1.0", "Common Public Attribution License 1.0", True)
@@ -155,6 +178,7 @@ licenses =
   , (LicenseId "ClArtistic", "Clarified Artistic License", False)
   , (LicenseId "Condor-1.1", "Condor Public License v1.1", False)
   , (LicenseId "Crossword", "Crossword License", False)
+  , (LicenseId "CrystalStacker", "CrystalStacker License", False)
   , (LicenseId "Cube", "Cube License", False)
   , (LicenseId "D-FSL-1.0", "Deutsche Freie Software Lizenz", False)
   , (LicenseId "DOC", "DOC License", False)
@@ -171,6 +195,7 @@ licenses =
   , (LicenseId "Entessa", "Entessa Public License v1.0", True)
   , (LicenseId "ErlPL-1.1", "Erlang Public License v1.1", False)
   , (LicenseId "Eurosym", "Eurosym License", False)
+  , (LicenseId "FSFAP", "FSF All Permissive License", False)
   , (LicenseId "FSFUL", "FSF Unlimited License", False)
   , (LicenseId "FSFULLR", "FSF Unlimited License (with License Retention)", False)
   , (LicenseId "FTL", "Freetype Project License", False)
@@ -197,24 +222,31 @@ licenses =
   , (LicenseId "ISC", "ISC License", True)
   , (LicenseId "ImageMagick", "ImageMagick License", False)
   , (LicenseId "Imlib2", "Imlib2 License", False)
+  , (LicenseId "Info-ZIP", "Info-ZIP License", False)
   , (LicenseId "Intel", "Intel Open Source License", True)
   , (LicenseId "Intel-ACPI", "Intel ACPI Software License Agreement", False)
+  , (LicenseId "Interbase-1.0", "Interbase Public License v1.0", False)
   , (LicenseId "JSON", "JSON License", False)
   , (LicenseId "JasPer-2.0", "JasPer License", False)
+  , (LicenseId "LAL-1.2", "Licence Art Libre 1.2", False)
+  , (LicenseId "LAL-1.3", "Licence Art Libre 1.3", False)
   , (LicenseId "LGPL-2.0", "GNU Library General Public License v2 only", True)
   , (LicenseId "LGPL-2.1", "GNU Lesser General Public License v2.1 only", True)
   , (LicenseId "LGPL-3.0", "GNU Lesser General Public License v3.0 only", True)
+  , (LicenseId "LGPLLR", "Lesser General Public License For Linguistic Resources", False)
   , (LicenseId "LPL-1.0", "Lucent Public License Version 1.0", True)
   , (LicenseId "LPL-1.02", "Lucent Public License v1.02", True)
   , (LicenseId "LPPL-1.0", "LaTeX Project Public License v1.0", False)
   , (LicenseId "LPPL-1.1", "LaTeX Project Public License v1.1", False)
   , (LicenseId "LPPL-1.2", "LaTeX Project Public License v1.2", False)
-  , (LicenseId "LPPL-1.3a", "LaTeX Project Public License 1.3a", False)
+  , (LicenseId "LPPL-1.3a", "LaTeX Project Public License v1.3a", False)
   , (LicenseId "LPPL-1.3c", "LaTeX Project Public License v1.3c", True)
   , (LicenseId "Latex2e", "Latex2e License", False)
   , (LicenseId "Leptonica", "Leptonica License", False)
+  , (LicenseId "LiLiQ-P-1.1", "Licence Libre du Qu\233bec \8211 Permissive version 1.1", True)
+  , (LicenseId "LiLiQ-R-1.1", "Licence Libre du Qu\233bec \8211 R\233ciprocit\233 version 1.1", True)
+  , (LicenseId "LiLiQ-Rplus-1.1", "Licence Libre du Qu\233bec \8211 R\233ciprocit\233 forte version 1.1", True)
   , (LicenseId "Libpng", "libpng License", False)
-  , (LicenseId "License Identifier", "Full name of License", False)
   , (LicenseId "MIT", "MIT License", True)
   , (LicenseId "MIT-CMU", "CMU License", False)
   , (LicenseId "MIT-advertising", "Enlightenment License (e16)", False)
@@ -237,6 +269,7 @@ licenses =
   , (LicenseId "NBPL-1.0", "Net Boolean Public License v1", False)
   , (LicenseId "NCSA", "University of Illinois/NCSA Open Source License", True)
   , (LicenseId "NGPL", "Nethack General Public License", True)
+  , (LicenseId "NLOD-1.0", "Norwegian Licence for Open Government Data", False)
   , (LicenseId "NLPL", "No Limit Public License", False)
   , (LicenseId "NOSL", "Netizen Open Source License", False)
   , (LicenseId "NPL-1.0", "Netscape Public License v1.0", False)
@@ -245,11 +278,13 @@ licenses =
   , (LicenseId "NRL", "NRL License", False)
   , (LicenseId "NTP", "NTP License", True)
   , (LicenseId "Naumen", "Naumen Public License", True)
+  , (LicenseId "Net-SNMP", "Net-SNMP License", False)
   , (LicenseId "NetCDF", "NetCDF license", False)
   , (LicenseId "Newsletr", "Newsletr License", False)
   , (LicenseId "Nokia", "Nokia Open Source License", True)
   , (LicenseId "Noweb", "Noweb License", False)
   , (LicenseId "Nunit", "Nunit License", False)
+  , (LicenseId "OCCT-PL", "Open CASCADE Technology Public License", False)
   , (LicenseId "OCLC-2.0", "OCLC Research Public License 2.0", True)
   , (LicenseId "ODbL-1.0", "ODC Open Database License v1.0", False)
   , (LicenseId "OFL-1.0", "SIL Open Font License 1.0", False)
@@ -273,6 +308,7 @@ licenses =
   , (LicenseId "OLDAP-2.8", "Open LDAP Public License v2.8", False)
   , (LicenseId "OML", "Open Market License", False)
   , (LicenseId "OPL-1.0", "Open Public License v1.0", False)
+  , (LicenseId "OSET-PL-2.1", "OSET Public License version 2.1", True)
   , (LicenseId "OSL-1.0", "Open Software License 1.0", True)
   , (LicenseId "OSL-1.1", "Open Software License 1.1", False)
   , (LicenseId "OSL-2.0", "Open Software License 2.0", True)
@@ -291,6 +327,7 @@ licenses =
   , (LicenseId "RPL-1.1", "Reciprocal Public License 1.1", True)
   , (LicenseId "RPL-1.5", "Reciprocal Public License 1.5", True)
   , (LicenseId "RPSL-1.0", "RealNetworks Public Source License v1.0", True)
+  , (LicenseId "RSA-MD", "RSA Message-Digest License ", False)
   , (LicenseId "RSCPL", "Ricoh Source Code Public License", True)
   , (LicenseId "Rdisc", "Rdisc License", False)
   , (LicenseId "Ruby", "Ruby License", False)
@@ -302,17 +339,26 @@ licenses =
   , (LicenseId "SISSL", "Sun Industry Standards Source License v1.1", True)
   , (LicenseId "SISSL-1.2", "Sun Industry Standards Source License v1.2", False)
   , (LicenseId "SMLNJ", "Standard ML of New Jersey License", False)
+  , (LicenseId "SMPPL", "Secure Messaging Protocol Public License", False)
   , (LicenseId "SNIA", "SNIA Public License 1.1", False)
   , (LicenseId "SPL-1.0", "Sun Public License v1.0", True)
   , (LicenseId "SWL", "Scheme Widget Library (SWL) Software License Agreement", False)
   , (LicenseId "Saxpath", "Saxpath License", False)
+  , (LicenseId "Sendmail", "Sendmail License", False)
   , (LicenseId "SimPL-2.0", "Simple Public License 2.0", True)
   , (LicenseId "Sleepycat", "Sleepycat License", True)
+  , (LicenseId "Spencer-86", "Spencer License 86", False)
+  , (LicenseId "Spencer-94", "Spencer License 94", False)
+  , (LicenseId "Spencer-99", "Spencer License 99", False)
   , (LicenseId "SugarCRM-1.1.3", "SugarCRM Public License v1.1.3", False)
   , (LicenseId "TCL", "TCL/TK License", False)
+  , (LicenseId "TCP-wrappers", "TCP Wrappers License", False)
   , (LicenseId "TMate", "TMate Open Source License", False)
   , (LicenseId "TORQUE-1.1", "TORQUE v2.5+ Software License v1.1", False)
   , (LicenseId "TOSL", "Trusster Open Source License", False)
+  , (LicenseId "UPL-1.0", "Universal Permissive License v1.0", True)
+  , (LicenseId "Unicode-DFS-2015", "Unicode License Agreement - Data Files and Software (2015)", False)
+  , (LicenseId "Unicode-DFS-2016", "Unicode License Agreement - Data Files and Software (2016)", False)
   , (LicenseId "Unicode-TOU", "Unicode Terms of Use", False)
   , (LicenseId "Unlicense", "The Unlicense", False)
   , (LicenseId "VOSTROM", "VOSTROM Public License for Open Source", False)
@@ -320,6 +366,7 @@ licenses =
   , (LicenseId "Vim", "Vim License", False)
   , (LicenseId "W3C", "W3C Software Notice and License (2002-12-31)", True)
   , (LicenseId "W3C-19980720", "W3C Software Notice and License (1998-07-20)", False)
+  , (LicenseId "W3C-20150513", "W3C Software Notice and Document License (2015-05-13)", False)
   , (LicenseId "WTFPL", "Do What The F*ck You Want To Public License", False)
   , (LicenseId "Watcom-1.0", "Sybase Open Watcom Public License 1.0", True)
   , (LicenseId "Wsuipa", "Wsuipa License", False)
@@ -340,6 +387,7 @@ licenses =
   , (LicenseId "Zlib", "zlib License", True)
   , (LicenseId "bzip2-1.0.5", "bzip2 and libbzip2 License v1.0.5", False)
   , (LicenseId "bzip2-1.0.6", "bzip2 and libbzip2 License v1.0.6", False)
+  , (LicenseId "curl", "curl License", False)
   , (LicenseId "diffmark", "diffmark license", False)
   , (LicenseId "dvipdfm", "dvipdfm License", False)
   , (LicenseId "eGenix", "eGenix.com Public License 1.1.0", False)

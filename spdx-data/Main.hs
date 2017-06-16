@@ -1,62 +1,20 @@
-{-# LANGUAGE CPP #-}
 module Main (main) where
 
-#ifndef MIN_VERSION_base
-#define MIN_VERSION_base(x,y,z) 0
-#endif
+import Data.List (sort)
+import Data.Foldable (toList, for_)
+import Data.Csv (decode, HasHeader (..))
 
-#if !MIN_VERSION_base(4,8,0)
-import Data.Traversable
-#endif
+import qualified Data.ByteString.Lazy as LBS
 
-import Data.List
-import Data.Maybe
-import Text.XML.Light
+extractLicense :: [String] -> (LicenseId, String, Bool)
+extractLicense row = (LicenseId $ row !! 1, row !! 0, (row !! 4) == "YES")
 
-simplify :: Element -> [[[String]]]
-simplify el =
-  let worksheets = filter isWorksheetElement $ childrenElements el
-      Just tables = traverse tableFromWorksheet worksheets
-  in map tableElements tables
-
-toElem :: Content -> Maybe Element
-toElem (Elem e) = Just e
-toElem _        = Nothing
-
-isElement :: String -> Element -> Bool
-isElement name = (name ==) . qName . elName
-
-isWorksheetElement :: Element -> Bool
-isWorksheetElement = isElement "Worksheet"
-
-childrenElements :: Element -> [Element]
-childrenElements = mapMaybe toElem . elContent
-
-tableFromWorksheet :: Element -> Maybe Element
-tableFromWorksheet = listToMaybe . filter (isElement "Table") . childrenElements
-
-textContent :: Content -> Maybe String
-textContent (Text t) = Just $ cdData t
-textContent _        = Nothing
-
-extractData :: Element -> String
-extractData el = maybe "" id $ do dataEl <- listToMaybe . filter (isElement "Data") . childrenElements $ el
-                                  textEl <- listToMaybe $ elContent dataEl
-                                  text <- textContent textEl
-                                  return text
-
-tableElements :: Element -> [[String]]
-tableElements = map cells . filter (isElement "Row") . childrenElements
-  where cells = map extractData . filter (isElement "Cell") . childrenElements
-
-extractLicense :: [String] -> (String, String, Bool)
-extractLicense row = (row !! 1, row !! 0, (row !! 4) == "YES")
+newtype LicenseId = LicenseId String
+  deriving (Eq, Ord, Show)
 
 main :: IO ()
 main = do
-  contents <- readFile "data/spdx_licenselist.xml"
-  let Just el = parseXMLDoc contents
-  let parsed = simplify el
-  let licenses = filter (not . null) $ parsed !! 0
-  f `mapM_` (sort $ map extractLicense licenses)
-  where f (l, n, osi) = putStrLn $ "  , (LicenseId " ++ show l ++ ", " ++ show n ++ ", " ++ show osi ++ ")"
+    contents <- LBS.readFile "data/spdx_licenselist_v2.6_licenses.csv"
+    licenses <- either fail (pure . toList) (decode HasHeader contents)
+    for_ (sort $ map extractLicense licenses) $ \triple ->
+        putStrLn $ "  , " ++ show triple
