@@ -43,6 +43,7 @@ library
   hs-source-dirs:      src/
   ghc-options:         -Wall
   build-depends:       base              >=4.2 && <4.11,
+                       containers,
                        transformers      >=0.3 && <0.6
   if impl(ghc >=7.2 && <7.5)
     build-depends: ghc-prim
@@ -58,4 +59,16 @@ test-suite test
   build-depends:       base              >=4.5  && <4.11,
                        tasty             >=0.10 && <0.12,
                        tasty-quickcheck  >=0.8  && <0.10,
+                       spdx
+
+benchmark bench
+  type:                exitcode-stdio-1.0
+  main-is:             Bench.hs
+  other-modules:       Generators
+  default-language:    Haskell98
+  hs-source-dirs:      tests bench
+  ghc-options:         -Wall
+  build-depends:       base              >=4.5  && <4.11,
+                       QuickCheck,
+                       tasty-quickcheck,
                        spdx
