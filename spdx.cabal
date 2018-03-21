@@ -18,7 +18,8 @@ tested-with:
   GHC==7.8.4,
   GHC==7.10.3,
   GHC==8.0.2,
-  GHC==8.2.1
+  GHC==8.2.2,
+  GHC==8.4.1
 
 source-repository head
   type: git
@@ -42,7 +43,7 @@ library
     other-extensions:  DeriveGeneric
   hs-source-dirs:      src/
   ghc-options:         -Wall
-  build-depends:       base              >=4.2 && <4.11,
+  build-depends:       base              >=4.2 && <4.12,
                        containers,
                        transformers      >=0.3 && <0.6
   if impl(ghc >=7.2 && <7.5)
@@ -56,9 +57,9 @@ test-suite test
   default-language:    Haskell98
   hs-source-dirs:      tests
   ghc-options:         -Wall
-  build-depends:       base              >=4.5  && <4.11,
-                       tasty             >=0.10 && <0.12,
-                       tasty-quickcheck  >=0.8  && <0.10,
+  build-depends:       base,
+                       tasty             >=0.10 && <1.1,
+                       tasty-quickcheck  >=0.8  && <0.11,
                        spdx
 
 benchmark bench
@@ -68,7 +69,7 @@ benchmark bench
   default-language:    Haskell98
   hs-source-dirs:      tests bench
   ghc-options:         -Wall
-  build-depends:       base              >=4.5  && <4.11,
-                       QuickCheck,
-                       tasty-quickcheck,
+  build-depends:       base,
+                       QuickCheck       >=2.11.3 && <2.12,
+                       tasty-quickcheck >=0.8    && <0.11,
                        spdx

@@ -24,11 +24,13 @@ module Data.SPDX.LatticeSyntax (LatticeSyntax(..), dual, freeVars, equivalent, p
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State.Strict
 import Data.Data
 import Data.Foldable
 import Data.Traversable
 import Prelude hiding (all, or)
+
+import qualified Data.Map.Strict as Map
 
 data LatticeSyntax a = LVar a
                      | LBound Bool
@@ -66,7 +68,7 @@ dual (LMeet a b) = LJoin (dual a) (dual b)
 --
 -- >>> equivalent (LMeet (LVar 'a') (LVar 'b')) (LMeet (LVar 'b') (LVar 'b'))
 -- False
-equivalent :: Eq a => LatticeSyntax a -> LatticeSyntax a -> Bool
+equivalent :: Ord a => LatticeSyntax a -> LatticeSyntax a -> Bool
 equivalent a b = all (uncurry (==)) . runEval $ p
   where p = (,) <$> evalLattice a <*> evalLattice b
 
@@ -79,14 +81,14 @@ equivalent a b = all (uncurry (==)) . runEval $ p
 --
 -- >>> preorder (LVar 'a') (LVar 'a' `LMeet` LVar 'b')
 -- False
-preorder :: Eq a => LatticeSyntax a -> LatticeSyntax a -> Bool
+preorder :: Ord a => LatticeSyntax a -> LatticeSyntax a -> Bool
 preorder a b = (a `LJoin` b) `equivalent` b
 
 -- | Return `True` if for some variable assigment expression evaluates to `True`.
-satisfiable :: Eq a => LatticeSyntax a -> Bool
+satisfiable :: Ord a => LatticeSyntax a -> Bool
 satisfiable = or . runEval . evalLattice
 
-newtype Eval v a = Eval { unEval :: StateT [(v, Bool)] [] a }
+newtype Eval v a = Eval { unEval :: StateT (Map.Map v Bool) [] a }
 
 instance Functor (Eval v) where
   fmap = liftM
@@ -108,19 +110,19 @@ instance MonadPlus (Eval v) where
   Eval a `mplus` Eval b = Eval $ a `mplus` b
 
 runEval :: Eval v a -> [a]
-runEval act = evalStateT (unEval act) []
+runEval act = evalStateT (unEval act) Map.empty
 
-evalLattice :: Eq v => LatticeSyntax v -> Eval v Bool
+evalLattice :: Ord v => LatticeSyntax v -> Eval v Bool
 evalLattice (LVar v)    = guess v
 evalLattice (LBound b)  = return b
 evalLattice (LJoin a b) = evalLattice a ||^ evalLattice b
 evalLattice (LMeet a b) = evalLattice a &&^ evalLattice b
 
-guess :: Eq v => v -> Eval v Bool
+guess :: Ord v => v -> Eval v Bool
 guess v = Eval $ do
   st <- get
-  let remember b = put ((v, b) : st) >> return b
-  case lookup v st of
+  let remember b = put (Map.insert v b st) >> return b
+  case Map.lookup v st of
     Just b  -> return b
     Nothing -> remember True <|> remember False
 
