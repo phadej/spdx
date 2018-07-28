@@ -1,7 +1,7 @@
 name:                spdx
 version:             0.2.2.0
 synopsis:            SPDX license expression language
-description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.0.pdf SPDX> related functionality.
+description:         Implementation of <https://spdx.org/sites/cpstandard/files/pages/files/spdx-2.0.pdf SPDX> related functionality.
 homepage:            https://github.com/phadej/spdx
 license:             BSD3
 license-file:        LICENSE
