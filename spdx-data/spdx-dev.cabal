@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 executable spdx-data
   main-is:             Main.hs
   build-depends:
-    base >=4.9 && <4.12,
+    base >=4.9 && <4.13,
     bytestring,
     cassava >=0.4.5.1 && <0.6
   ghc-options:         -Wall -Werror
