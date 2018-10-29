@@ -11,20 +11,17 @@ import Control.Applicative
 
 import           Test.Tasty.QuickCheck as QC
 
-import           Data.SPDX
-import           Data.SPDX.LatticeSyntax (LatticeSyntax(..))
+import           Distribution.SPDX
+import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
 
 licenseIdGen :: Gen LicenseId
-licenseIdGen = elements licenseIdentifiers
+licenseIdGen = elements $ licenseIdList LicenseListVersion_3_2
 
 licenseExceptionGen :: Gen LicenseExceptionId
-licenseExceptionGen = elements licenseExceptions
-
-maybeGen :: Gen a -> Gen (Maybe a)
-maybeGen g = oneof [ pure Nothing, Just <$> g]
+licenseExceptionGen = elements $ licenseExceptionIdList LicenseListVersion_3_2
 
 licenseRefGen :: Gen LicenseRef
-licenseRefGen = LicenseRef <$> maybeGen idStringGen <*> idStringGen
+licenseRefGen = mkLicenseRef' <$> liftArbitrary idStringGen <*> idStringGen
 
 idStringGen :: Gen String
 idStringGen = elements ["foo", "bar", "baz", "AllRightsReserved"]
@@ -39,29 +36,32 @@ latticeSyntaxGen = sized gen
                       ]
           where gen' = gen (n `div` 2)
 
-mkExprGen :: Gen LicenseExpression -> Gen LicenseExpression
-mkExprGen licGen = sized gen
-  where gen 0 = licGen
-        gen n = oneof [ licGen
-                      , EDisjunction <$> gen' <*> gen'
-                      , EConjunction <$> gen' <*> gen'
-                      ]
-          where gen' = gen (n `div` 2)
+mkExprGen :: Gen LicenseExpression -> Gen License
+mkExprGen licGen = License <$> sized gen where
+    gen 0 = licGen
+    gen n = oneof [ licGen
+                  , EOr <$> gen' <*> gen'
+                  , EAnd <$> gen' <*> gen'
+                  ]
+      where gen' = gen (n `div` 2)
 
-exprGen :: Gen LicenseExpression
-exprGen = mkExprGen $ ELicense <$> arbitrary <*> (Right <$> licenseIdGen) <*> (pure Nothing)
+exprGen :: Gen License
+exprGen = mkExprGen $ ELicense <$> simpleLicenseExprGen <*> pure Nothing
 
 -- | 'exprGen' which contains also LicenseRefs and exceptions
-exprGen' :: Gen LicenseExpression
-exprGen' = mkExprGen $ ELicense <$> arbitrary <*> eitherLicenseIdRefGen <*> maybeGen licenseExceptionGen
+exprGen' :: Gen License
+exprGen' = mkExprGen $ ELicense <$> simpleLicenseExprGen <*> liftArbitrary licenseExceptionGen
 
-eitherLicenseIdRefGen :: Gen (Either LicenseRef LicenseId)
-eitherLicenseIdRefGen = oneof [Right <$> licenseIdGen, Left <$> licenseRefGen]
+simpleLicenseExprGen :: Gen SimpleLicenseExpression
+simpleLicenseExprGen = oneof [ELicenseId <$> licenseIdGen, ELicenseRef <$> licenseRefGen]
 
-exprShrink :: LicenseExpression -> [LicenseExpression]
-exprShrink (ELicense _ _ _)   = []
-exprShrink (EDisjunction a b) = a : b : ((a `EDisjunction`) <$> exprShrink b) ++ ((`EDisjunction` b) <$> exprShrink a)
-exprShrink (EConjunction a b) = a : b : ((a `EConjunction`) <$> exprShrink b) ++ ((`EConjunction` b) <$> exprShrink a)
+exprShrink :: License -> [License]
+exprShrink NONE        = []
+exprShrink (License e) = map License (go e) where
+    go :: LicenseExpression -> [LicenseExpression]
+    go (ELicense _ _) = []
+    go (EOr a b)      = a : b : map (uncurry EOr)  (liftShrink2 go go (a, b))
+    go (EAnd a b)     = a : b : map (uncurry EAnd) (liftShrink2 go go (a, b))
 
 scaleGen :: (Int -> Int) -> Gen a -> Gen a
 scaleGen f g = sized (\n -> resize (f n) g)
