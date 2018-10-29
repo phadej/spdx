@@ -1,25 +1,28 @@
+cabal-version:       2.2
 name:                spdx
-version:             0.2.2.0
-synopsis:            SPDX license expression language
-description:         Implementation of <http://spdx.org/sites/spdx/files/SPDX-2.0.pdf SPDX> related functionality.
+version:             1
+
+synopsis:            SPDX license expression language, Extras
+category:            Data
+description:         Cabal provides SPDX types. This package provides some extras.
+
 homepage:            https://github.com/phadej/spdx
-license:             BSD3
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Oleg Grenrus <oleg.grenrus@iki.fi>
 maintainer:          Oleg Grenrus <oleg.grenrus@iki.fi>
-copyright:           (c) 2015 Oleg Grenrus
-category:            Data
+copyright:           (c) 2015-2018 Oleg Grenrus
 build-type:          Simple
+
 extra-source-files:  README.md CHANGELOG.md
-cabal-version:       >=1.10
 tested-with:
-  GHC==7.4.2,
-  GHC==7.6.3,
-  GHC==7.8.4,
-  GHC==7.10.3,
-  GHC==8.0.2,
-  GHC==8.2.2,
-  GHC==8.4.1
+  GHC ==7.6.3
+   || ==7.8.4
+   || ==7.10.3
+   || ==8.0.2
+   || ==8.2.2
+   || ==8.4.4
+   || ==8.6.1
 
 source-repository head
   type: git
@@ -27,28 +30,22 @@ source-repository head
 
 library
   default-language:    Haskell98
-  exposed-modules:     Data.SPDX,
-                       Data.SPDX.LatticeSyntax
-  other-modules:       Data.SPDX.Licenses,
-                       Data.SPDX.Types,
-                       Data.SPDX.Parser,
-                       Data.SPDX.Pretty,
-                       Data.SPDX.Ranges
-  other-extensions:    CPP
-                       DeriveFunctor,
-                       DeriveFoldable,
-                       DeriveTraversable,
-                       DeriveDataTypeable
-  if impl(ghc >=7.2)
-    other-extensions:  DeriveGeneric
+  exposed-modules:
+    Distribution.SPDX.Extra
+    Distribution.SPDX.Extra.Internal
+  other-extensions:
+    CPP
+    DeriveFunctor,
+    DeriveFoldable,
+    DeriveTraversable,
+    DeriveDataTypeable
   hs-source-dirs:      src/
   ghc-options:         -Wall
-  build-depends:       base              >=4.2 && <4.12,
-                       containers,
-                       transformers      >=0.3 && <0.6
-  if impl(ghc >=7.2 && <7.5)
-    build-depends: ghc-prim
-
+  build-depends:
+    , base              >=4.3.0.0 && <4.13
+    , Cabal             >=2.4.0.1 && <2.5
+    , containers        >=0.5.0.0 && <0.7
+    , transformers      >=0.3     && <0.6
 
 test-suite test
   type:                exitcode-stdio-1.0
@@ -57,10 +54,13 @@ test-suite test
   default-language:    Haskell98
   hs-source-dirs:      tests
   ghc-options:         -Wall
-  build-depends:       base,
-                       tasty             >=0.10 && <1.1,
-                       tasty-quickcheck  >=0.8  && <0.11,
-                       spdx
+  build-depends:
+    , base
+    , base-compat       ^>=0.10.5
+    , Cabal
+    , spdx
+    , tasty             ^>=1.1.0.4
+    , tasty-quickcheck  ^>=0.10
 
 benchmark bench
   type:                exitcode-stdio-1.0
@@ -69,7 +69,10 @@ benchmark bench
   default-language:    Haskell98
   hs-source-dirs:      tests bench
   ghc-options:         -Wall
-  build-depends:       base,
-                       QuickCheck       >=2.11.3 && <2.12,
-                       tasty-quickcheck >=0.8    && <0.11,
-                       spdx
+  build-depends:
+    , base
+    , base-compat       ^>=0.10.5
+    , Cabal
+    , spdx
+    , QuickCheck       ^>=2.12.6.1
+    , tasty-quickcheck ^>=0.10
