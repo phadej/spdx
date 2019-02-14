@@ -59,7 +59,7 @@ test-suite test
     , base-compat       ^>=0.10.5
     , Cabal
     , spdx
-    , tasty             ^>=1.1.0.4
+    , tasty             ^>=1.1.0.4 || ^>=1.2
     , tasty-quickcheck  ^>=0.10
 
 benchmark bench
