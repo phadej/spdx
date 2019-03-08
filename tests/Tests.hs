@@ -6,13 +6,15 @@ import Distribution.Pretty
 import Distribution.SPDX
 import Distribution.SPDX.Extra
 import Distribution.SPDX.Extra.Internal (LatticeSyntax (..))
-import Generators
 import Prelude ()
 import Prelude.Compat
 import Test.Tasty
 import Test.Tasty.QuickCheck            as QC
 
 import qualified Distribution.SPDX.Extra.Internal as LS
+
+import Generators
+import OSI
 
 main :: IO ()
 main = defaultMain tests
@@ -39,7 +41,6 @@ units :: TestTree
 units = testGroup "Unit tests" [ simpleUnits
                                , compositeUnits
                                ]
-
 
 -- | Like `equivalent`, but prints a counterexample when it fails.
 equivalentProp :: Maybe License -> Maybe License -> Property
@@ -79,18 +80,29 @@ lsProps = testGroup "LatticeSyntax"
 
 qcProps :: TestTree
 qcProps = testGroup "By Quickcheck"
-  [ QC.testProperty "licence identifiers are valid licenses" $ forAll licenseIdGen $ valid . prettyShow
-  , lsProps
-  , parsePrettyProps
-  ]
+    [ QC.testProperty "licence identifiers are valid licenses" $ forAll licenseIdGen $ valid . prettyShow
+    , lsProps
+    , parsePrettyProps
+    , testGroup "internal"
+        [ QC.testProperty "direct = satisfies" $ forAll exprGen $ \expr ->
+            isOsiApprovedExprDirect expr === isOsiApprovedExprSatisfies expr
+        , QC.testProperty "direct = satisfies2" $ forAllShrink exprGen exprShrink $ \expr ->
+            isOsiApprovedExprDirect expr === isOsiApprovedExprSatisfies2 expr
+        , QC.testProperty "satisfies agree" $
+            forAllShrink exprGen exprShrink $ \a ->
+            forAllShrink exprGen exprShrink $ \b ->
+              let value = satisfies (License a) (License b)
+              in label (show value) $ value === satisfies2 a b
+        ] 
+    ]
 
 parsePrettyProps :: TestTree
 parsePrettyProps = testGroup "parse . pretty"
   [ QC.testProperty "LicenseId" $ forAll licenseIdGen $ \i -> mkLicenseId LicenseListVersion_3_2 (prettyShow i) === Just i
-  , QC.testProperty "LicenseExpression"  $ forAllShrink (scaleGen (`div` 3) exprGen)  exprShrink $ \e ->
+  , QC.testProperty "LicenseExpression"  $ forAllShrink (scaleGen (`div` 3) licenseGen)  licenseShrink $ \e ->
       let p = prettyShow e
       in counterexample p $ simpleParsec p `equivalentProp` Just e
-  , QC.testProperty "LicenseExpression'" $ forAllShrink (scaleGen (`div` 3) exprGen') exprShrink $ \e ->
+  , QC.testProperty "LicenseExpression'" $ forAllShrink (scaleGen (`div` 3) licenseGen') licenseShrink $ \e ->
       let p = prettyShow e
       in counterexample p $ simpleParsec p `equivalentProp` Just e
   ]

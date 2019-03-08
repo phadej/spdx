@@ -9,7 +9,7 @@ module Generators where
 import Control.Applicative
 #endif
 
-import           Test.Tasty.QuickCheck as QC
+import           Test.QuickCheck as QC
 
 import           Distribution.SPDX
 import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
@@ -36,8 +36,8 @@ latticeSyntaxGen = sized gen
                       ]
           where gen' = gen (n `div` 2)
 
-mkExprGen :: Gen LicenseExpression -> Gen License
-mkExprGen licGen = License <$> sized gen where
+mkExprGen :: Gen LicenseExpression -> Gen LicenseExpression
+mkExprGen licGen = sized gen where
     gen 0 = licGen
     gen n = oneof [ licGen
                   , EOr <$> gen' <*> gen'
@@ -45,19 +45,34 @@ mkExprGen licGen = License <$> sized gen where
                   ]
       where gen' = gen (n `div` 2)
 
-exprGen :: Gen License
+licenseGen :: Gen License
+licenseGen = frequency
+    [ (1, pure NONE)
+    , (50, License <$> exprGen)
+    ]
+
+licenseGen' :: Gen License
+licenseGen' = frequency
+    [ (1, pure NONE)
+    , (50, License <$> exprGen')
+    ]
+
+exprGen :: Gen LicenseExpression
 exprGen = mkExprGen $ ELicense <$> simpleLicenseExprGen <*> pure Nothing
 
 -- | 'exprGen' which contains also LicenseRefs and exceptions
-exprGen' :: Gen License
+exprGen' :: Gen LicenseExpression
 exprGen' = mkExprGen $ ELicense <$> simpleLicenseExprGen <*> liftArbitrary licenseExceptionGen
 
 simpleLicenseExprGen :: Gen SimpleLicenseExpression
 simpleLicenseExprGen = oneof [ELicenseId <$> licenseIdGen, ELicenseRef <$> licenseRefGen]
 
-exprShrink :: License -> [License]
-exprShrink NONE        = []
-exprShrink (License e) = map License (go e) where
+licenseShrink :: License -> [License]
+licenseShrink NONE        = []
+licenseShrink (License e) = map License (exprShrink e)
+
+exprShrink :: LicenseExpression -> [LicenseExpression]
+exprShrink = go where
     go :: LicenseExpression -> [LicenseExpression]
     go (ELicense _ _) = []
     go (EOr a b)      = a : b : map (uncurry EOr)  (liftShrink2 go go (a, b))

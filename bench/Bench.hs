@@ -1,39 +1,69 @@
 module Main (main) where
 
-import Generators
-import Test.QuickCheck
-import Test.QuickCheck.Random (mkQCGen)
+import Criterion.Main (Benchmark, bench, defaultMain, env, bgroup, nf)
+
+import Control.Monad (forM)
+
+import qualified Test.QuickCheck        as QC
+import qualified Test.QuickCheck.Gen    as QC
+import qualified Test.QuickCheck.Random as QC
 
 import Distribution.SPDX
 import Distribution.SPDX.Extra
 
+import Generators
+import OSI
+
 main :: IO ()
-main = quickCheckWith args $
-    forAll (scaleGen (`div` 3) exprGen) $ \e' -> case e' of
-        NONE      -> True
-        License e -> isOsiApprovedExpr e == isOsiApprovedExpr' e
-  where
-    args = stdArgs
-        { replay = Just (mkQCGen 1337, 0)
-        , maxSuccess = 500
-        }
+main = defaultMain
+    [ randomBench 15
+    , randomBench 31
+    , randomBench 132
+    , osiBench 1337
+    , osiBench 42
+    ]
 
-osiLicenseIds :: [LicenseId]
-osiLicenseIds = filter licenseIsOsiApproved [minBound .. maxBound]
+-------------------------------------------------------------------------------
+-- Random satisfies bench
+-------------------------------------------------------------------------------
 
-osiLicenseExpr :: LicenseExpression
-osiLicenseExpr = foldr1 EAnd $ map (\l -> ELicense (ELicenseId l) Nothing) osiLicenseIds
+randomBench :: Int -> Benchmark
+randomBench seed = env (pairs <$> getExprs seed) $ \ps -> bgroup "random"
+    [ bench "satisfies" $ nf (map $ uncurry satisfies . bimapLicense) ps
+    , bench "satisfies2" $ nf (map $ uncurry satisfies2) ps
+    ]
 
-isOsiApprovedExpr :: LicenseExpression -> Bool
-isOsiApprovedExpr (ELicense _ (Just _)) = False
-isOsiApprovedExpr (ELicense sl Nothing) = simple sl
-isOsiApprovedExpr (EAnd e1 e2)          = isOsiApprovedExpr e1 && isOsiApprovedExpr e2
-isOsiApprovedExpr (EOr e1 e2)           = isOsiApprovedExpr e1 || isOsiApprovedExpr e2
+bimapLicense :: (LicenseExpression, LicenseExpression) -> (License, License)
+bimapLicense (a, b) = (License a, License b)
 
-simple :: SimpleLicenseExpression -> Bool
-simple (ELicenseId i)     = licenseIsOsiApproved i
-simple (ELicenseIdPlus _) = False -- we don't know ranges
-simple (ELicenseRef _)    = False
+pairs :: [a] -> [(a,a)]
+pairs []        = []
+pairs xs@(_:ys) = zip xs ys
 
-isOsiApprovedExpr' :: LicenseExpression -> Bool
-isOsiApprovedExpr' e = License e `satisfies` License osiLicenseExpr
+-------------------------------------------------------------------------------
+-- Bench of isOsiApprovedExpr
+-------------------------------------------------------------------------------
+
+osiBench :: Int -> Benchmark
+osiBench seed = env (getExprs seed) $ \exprs -> bgroup ("Seed " ++ show seed)
+    -- interestingly forcing expr takes more time than checking if it's osi approved
+    [ bench "baseline"   $ nf id exprs
+    , bench "direct"     $ nf (map isOsiApprovedExprDirect) exprs
+    , bench "satisfies"  $ nf (map isOsiApprovedExprSatisfies) exprs
+    , bench "satisfies2" $ nf (map isOsiApprovedExprSatisfies2) exprs
+    ]
+
+-------------------------------------------------------------------------------
+-- Generate expression data
+-------------------------------------------------------------------------------
+
+getExprs :: Int -> IO [LicenseExpression]
+getExprs seed = return exprs where
+    exprs :: [LicenseExpression]
+    exprs = QC.unGen g initGen 100
+      where
+        g :: QC.Gen [LicenseExpression]
+        g = forM [1..1000] $ \s -> QC.resize (min 10 s) exprGen
+
+        initGen :: QC.QCGen
+        initGen = QC.mkQCGen seed
