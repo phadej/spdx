@@ -22,7 +22,7 @@ tested-with:
    || ==8.0.2
    || ==8.2.2
    || ==8.4.4
-   || ==8.6.1
+   || ==8.6.4
 
 source-repository head
   type: git
