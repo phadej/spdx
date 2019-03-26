@@ -74,5 +74,5 @@ benchmark bench
     , base-compat       ^>=0.10.5
     , Cabal
     , spdx
-    , QuickCheck       ^>=2.12.6.1
+    , QuickCheck       ^>=2.12.6.1 || ^>=2.13
     , tasty-quickcheck ^>=0.10
