@@ -1,7 +1,7 @@
+{-# LANGUAGE CPP #-}
 module Main (main) where
 
 import Data.Maybe                       (isJust)
-import Distribution.Parsec.Class
 import Distribution.Pretty
 import Distribution.SPDX
 import Distribution.SPDX.Extra
@@ -11,6 +11,12 @@ import Prelude ()
 import Prelude.Compat
 import Test.Tasty
 import Test.Tasty.QuickCheck            as QC
+
+#if MIN_VERSION_Cabal(3,0,0)
+import Distribution.Parsec
+#else
+import Distribution.Parsec.Class
+#endif
 
 import qualified Distribution.SPDX.Extra.Internal as LS
 
@@ -42,9 +48,11 @@ units = testGroup "Unit tests" [ simpleUnits
 
 
 -- | Like `equivalent`, but prints a counterexample when it fails.
-equivalentProp :: Maybe License -> Maybe License -> Property
-equivalentProp x y = counterexample (show x ++ " /= " ++ show y) $
-    length x == length y && (and $ equivalent <$> x <*> y)
+equivalentProp :: Either String License -> Maybe License -> Property
+equivalentProp (Left _)  Nothing  = property True
+equivalentProp (Left e)  (Just y) = counterexample (e ++ " /      = " ++ show y) $ False
+equivalentProp (Right x) Nothing  = counterexample (show x ++ " / = <nothing>") $ False
+equivalentProp (Right x) (Just y) = counterexample (show x ++ " /= " ++ show y) $ equivalent x y
 
 simpleUnits :: TestTree
 simpleUnits = testGroup "Simple License Expressions"
@@ -86,11 +94,11 @@ qcProps = testGroup "By Quickcheck"
 
 parsePrettyProps :: TestTree
 parsePrettyProps = testGroup "parse . pretty"
-  [ QC.testProperty "LicenseId" $ forAll licenseIdGen $ \i -> mkLicenseId LicenseListVersion_3_2 (prettyShow i) === Just i
+  [ QC.testProperty "LicenseId" $ forAll licenseIdGen $ \i -> mkLicenseId latestLicenseListVersion (prettyShow i) === Just i
   , QC.testProperty "LicenseExpression"  $ forAllShrink (scaleGen (`div` 3) exprGen)  exprShrink $ \e ->
       let p = prettyShow e
-      in counterexample p $ simpleParsec p `equivalentProp` Just e
+      in counterexample p $ eitherParsec p `equivalentProp` Just e
   , QC.testProperty "LicenseExpression'" $ forAllShrink (scaleGen (`div` 3) exprGen') exprShrink $ \e ->
       let p = prettyShow e
-      in counterexample p $ simpleParsec p `equivalentProp` Just e
+      in counterexample p $ eitherParsec p `equivalentProp` Just e
   ]
