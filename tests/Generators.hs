@@ -14,11 +14,18 @@ import           Test.Tasty.QuickCheck as QC
 import           Distribution.SPDX
 import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
 
+latestLicenseListVersion :: LicenseListVersion
+#if MIN_VERSION_Cabal(3,0,0)
+latestLicenseListVersion = LicenseListVersion_3_6
+#else
+latestLicenseListVersion = LicenseListVersion_3_2
+#endif
+
 licenseIdGen :: Gen LicenseId
-licenseIdGen = elements $ licenseIdList LicenseListVersion_3_2
+licenseIdGen = elements $ licenseIdList latestLicenseListVersion
 
 licenseExceptionGen :: Gen LicenseExceptionId
-licenseExceptionGen = elements $ licenseExceptionIdList LicenseListVersion_3_2
+licenseExceptionGen = elements $ licenseExceptionIdList latestLicenseListVersion
 
 licenseRefGen :: Gen LicenseRef
 licenseRefGen = mkLicenseRef' <$> liftArbitrary idStringGen <*> idStringGen
