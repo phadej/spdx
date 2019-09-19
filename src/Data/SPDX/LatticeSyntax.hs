@@ -1,13 +1,13 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveTraversable  #-}
 #if __GLASGOW_HASKELL__ >= 701
 #if __GLASGOW_HASKELL__ >= 703
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE Safe               #-}
 #else
-{-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE Trustworthy        #-}
 #endif
 #endif
 -- |
@@ -28,7 +28,7 @@ import Control.Monad.Trans.State.Strict
 import Data.Data
 import Data.Foldable
 import Data.Traversable
-import Prelude hiding (all, or)
+import Prelude                          hiding (all, or)
 
 import qualified Data.Map.Strict as Map
 

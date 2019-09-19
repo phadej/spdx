@@ -1,15 +1,15 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 #if __GLASGOW_HASKELL__ >= 701
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric      #-}
 #endif
 
 #if __GLASGOW_HASKELL__ >= 701
 #if __GLASGOW_HASKELL__ >= 703
-{-# LANGUAGE Safe #-}
+{-# LANGUAGE Safe               #-}
 #else
-{-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE Trustworthy        #-}
 #endif
 #endif
 module Data.SPDX.Types (

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP  #-}
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Safe #-}
 #endif
@@ -16,8 +16,8 @@ import Control.Monad
 import Data.Char
 import Text.ParserCombinators.ReadP
 
+import Data.SPDX.Licenses (licenseExceptions, licenseIdentifiers)
 import Data.SPDX.Types
-import Data.SPDX.Licenses (licenseIdentifiers, licenseExceptions)
 
 infixl 4 `ap'`
 
