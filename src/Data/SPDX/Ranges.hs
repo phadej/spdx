@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP  #-}
 #if __GLASGOW_HASKELL__ >= 701
 {-# LANGUAGE Safe #-}
 #endif
@@ -8,8 +8,8 @@ import Data.Char
 import Data.List
 import Data.Maybe
 
-import Data.SPDX.Types
 import Data.SPDX.Licenses
+import Data.SPDX.Types
 
 licenseRanges :: [[LicenseId]]
 licenseRanges = filter longerThanSingleton . map f $ prefixes

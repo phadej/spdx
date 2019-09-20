@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveTraversable  #-}
 -- |
 --
 -- Inspired by <http://www.well-typed.com/blog/2014/12/simple-smt-solver/ Simple SMT Solver>.
@@ -17,7 +17,7 @@ import Control.Monad.Trans.State.Strict
 import Data.Data
 import Data.Foldable
 import Data.Traversable
-import Prelude hiding (all, or)
+import Prelude                          hiding (all, or)
 
 import qualified Data.Map.Strict as Map
 
