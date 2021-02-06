@@ -15,7 +15,9 @@ import           Distribution.SPDX
 import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
 
 latestLicenseListVersion :: LicenseListVersion
-#if MIN_VERSION_Cabal(3,0,0)
+#if MIN_VERSION_Cabal(3,4,0)
+latestLicenseListVersion = LicenseListVersion_3_9
+#elif MIN_VERSION_Cabal(3,0,0)
 latestLicenseListVersion = LicenseListVersion_3_6
 #else
 latestLicenseListVersion = LicenseListVersion_3_2
