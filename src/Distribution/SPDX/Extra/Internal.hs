@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveFoldable     #-}
-{-# LANGUAGE DeriveFunctor      #-}
 {-# LANGUAGE DeriveTraversable  #-}
 -- |
 --
@@ -28,11 +26,10 @@ data LatticeSyntax a = LVar a
   deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable, Typeable, Data)
 
 instance Applicative LatticeSyntax where
-  pure  = return
+  pure  = pure
   (<*>) = ap
 
 instance Monad LatticeSyntax where
-  return = LVar
   LVar x    >>= f = f x
   LBound b  >>= _ = LBound b
   LJoin a b >>= f = LJoin (a >>= f) (b >>= f)
@@ -83,7 +80,7 @@ instance Functor (Eval v) where
   fmap = liftM
 
 instance Applicative (Eval v) where
-  pure = return
+  pure = Eval . pure
   (<*>) = ap
 
 instance Alternative (Eval v) where
@@ -91,7 +88,7 @@ instance Alternative (Eval v) where
   (<|>) = mplus
 
 instance Monad (Eval v) where
-  return = Eval . return
+  return = pure
   Eval m >>= k = Eval $ m >>= unEval . k
 
 instance MonadPlus (Eval v) where
