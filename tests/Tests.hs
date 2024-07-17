@@ -1,22 +1,14 @@
-{-# LANGUAGE CPP #-}
 module Main (main) where
 
 import Data.Maybe                       (isJust)
+import Distribution.Parsec
 import Distribution.Pretty
 import Distribution.SPDX
 import Distribution.SPDX.Extra
 import Distribution.SPDX.Extra.Internal (LatticeSyntax (..))
 import Generators
-import Prelude ()
-import Prelude.Compat
 import Test.Tasty
 import Test.Tasty.QuickCheck            as QC
-
-#if MIN_VERSION_Cabal(3,0,0)
-import Distribution.Parsec
-#else
-import Distribution.Parsec.Class
-#endif
 
 import qualified Distribution.SPDX.Extra.Internal as LS
 

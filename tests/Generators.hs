@@ -1,28 +1,16 @@
 {-# LANGUAGE CPP #-}
 module Generators where
 
-#ifndef MIN_VERSION_base
-#define MIN_VERSION_base(x,y,z) 0
-#endif
-
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative
-#endif
-
 import           Test.Tasty.QuickCheck as QC
 
 import           Distribution.SPDX
 import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
 
 latestLicenseListVersion :: LicenseListVersion
-#if MIN_VERSION_Cabal(3,8,0)
-latestLicenseListVersion = LicenseListVersion_3_16
-#elif MIN_VERSION_Cabal(3,4,0)
-latestLicenseListVersion = LicenseListVersion_3_9
-#elif MIN_VERSION_Cabal(3,0,0)
-latestLicenseListVersion = LicenseListVersion_3_6
+#if MIN_VERSION_Cabal_syntax(3,12,0)
+latestLicenseListVersion = LicenseListVersion_3_23
 #else
-latestLicenseListVersion = LicenseListVersion_3_2
+latestLicenseListVersion = LicenseListVersion_3_16
 #endif
 
 licenseIdGen :: Gen LicenseId
