@@ -4,7 +4,6 @@ module Generators where
 import           Test.Tasty.QuickCheck as QC
 
 import           Distribution.SPDX
-import           Distribution.SPDX.Extra.Internal (LatticeSyntax(..))
 
 latestLicenseListVersion :: LicenseListVersion
 #if MIN_VERSION_Cabal_syntax(3,12,0)
@@ -24,16 +23,6 @@ licenseRefGen = mkLicenseRef' <$> liftArbitrary idStringGen <*> idStringGen
 
 idStringGen :: Gen String
 idStringGen = elements ["foo", "bar", "baz", "AllRightsReserved"]
-
-latticeSyntaxGen :: Gen (LatticeSyntax Char)
-latticeSyntaxGen = sized gen
-  where var   = LVar <$> elements "abcdef"
-        gen 0 = var
-        gen n = oneof [ var
-                      , LMeet <$> gen' <*> gen'
-                      , LJoin <$> gen' <*> gen'
-                      ]
-          where gen' = gen (n `div` 2)
 
 mkExprGen :: Gen LicenseExpression -> Gen License
 mkExprGen licGen = License <$> sized gen where

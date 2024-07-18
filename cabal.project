@@ -1,1 +1,7 @@
 packages: .
+tests: True
+
+package spdx
+  ghc-options: -Wall
+
+-- cabal run test -- -p "LicenseEx" --quickcheck-tests 1000 --quickcheck-timeout=1s --quickcheck-replay="(SMGen 5177394945948384830 10312189237211584183,97)"
