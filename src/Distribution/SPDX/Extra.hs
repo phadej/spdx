@@ -73,5 +73,5 @@ licTo (EAnd a b)         = LMeet (licTo a) (licTo b)
 licTo (EOr a b)          = LJoin (licTo a) (licTo b)
 
 -- $setup
--- >>> import Distribution.Parsec.Class (simpleParsec)
+-- >>> import Distribution.Parsec (simpleParsec)
 -- >>> let unsafeParseExpr e = maybe (error $ "invalid: " ++ e) (id :: License -> License) (simpleParsec e)
