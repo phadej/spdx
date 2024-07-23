@@ -14,12 +14,20 @@ module Distribution.SPDX.Extra (
   equivalent,
   ) where
 
+import Control.Monad.SAT
+import qualified Data.Map.Strict as Map
+import Control.Monad.Trans.Class (lift)
+import Data.Map.Strict (Map)
+import Control.Monad.Trans.State
+import Data.Maybe (isNothing)
+
 import Distribution.SPDX
        (License (..), LicenseExceptionId, LicenseExpression (..), LicenseId,
        SimpleLicenseExpression (..))
-import Distribution.SPDX.Extra.Internal (LatticeSyntax (..))
 
-import qualified Distribution.SPDX.Extra.Internal as LS
+-- $setup
+-- >>> import Distribution.Parsec (simpleParsec)
+-- >>> let unsafeParseExpr e = maybe (error $ "invalid: " ++ e) (id :: License -> License) (simpleParsec e)
 
 -- |
 --
@@ -43,7 +51,13 @@ import qualified Distribution.SPDX.Extra.Internal as LS
 satisfies :: License -- ^ package license
           -> License -- ^ license policy
           -> Bool
-satisfies a b = exprToLSLic b `LS.preorder` exprToLSLic a
+satisfies a b = isNothing $ runSATMaybe $ flip evalStateT Map.empty $ do
+    a' <- exprToProp a >>= lift . addDefinition
+    b' <- exprToProp b >>= lift . addDefinition
+    lift $ addProp $ neg $ lit b' --> lit a'
+    lift solve_
+
+    -- exprToLSLic b `LS.preorder` exprToLSLic a
 
 -- | Check wheather two 'LicenseExpression' are equivalent.
 --
@@ -54,24 +68,38 @@ satisfies a b = exprToLSLic b `LS.preorder` exprToLSLic a
 -- False
 --
 equivalent :: License -> License -> Bool
-equivalent a b = exprToLSLic a `LS.equivalent` exprToLSLic b
+equivalent a b = isNothing $ runSATMaybe $ flip evalStateT Map.empty $ do
+    a' <- exprToProp a >>= lift . addDefinition
+    b' <- exprToProp b >>= lift . addDefinition
+    lift $ addProp $ neg $ lit a' <-> lit b'
+    lift solve_
 
--------------------------------------------------------------------------------
+----------------------------------f---------------------------------------------
 -- internal
 -------------------------------------------------------------------------------
 
 data Lic = Lic !SimpleLicenseExpression !(Maybe LicenseExceptionId)
   deriving (Eq, Ord)
 
-exprToLSLic :: License -> LatticeSyntax Lic
-exprToLSLic NONE          = LBound False
-exprToLSLic (License lic) = licTo lic
+exprToProp :: License -> StateT (Map Lic (Lit s)) (SAT s) (Prop s)
+exprToProp NONE          = return false
+exprToProp (License lic) = licToProp lic
 
-licTo :: LicenseExpression -> LatticeSyntax Lic
-licTo (ELicense lic exc) = LVar (Lic lic exc)
-licTo (EAnd a b)         = LMeet (licTo a) (licTo b)
-licTo (EOr a b)          = LJoin (licTo a) (licTo b)
-
--- $setup
--- >>> import Distribution.Parsec (simpleParsec)
--- >>> let unsafeParseExpr e = maybe (error $ "invalid: " ++ e) (id :: License -> License) (simpleParsec e)
+licToProp :: LicenseExpression -> StateT (Map Lic (Lit s)) (SAT s) (Prop s)
+licToProp (EAnd a b) = do
+    a' <- licToProp a
+    b' <- licToProp b
+    return (a' /\ b')
+licToProp (EOr a b) = do
+    a' <- licToProp a
+    b' <- licToProp b
+    return (a' \/ b')
+licToProp (ELicense lic exc) = do
+    let k = Lic lic exc
+    s <- get
+    case Map.lookup k s of
+        Just l -> return (lit l)
+        Nothing -> do
+            l <- lift newLit
+            put (Map.insert k l s)
+            return (lit l)

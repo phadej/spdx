@@ -1,6 +1,6 @@
-cabal-version:      2.2
+cabal-version:      3.4
 name:               spdx
-version:            1.0.1
+version:            1.1
 synopsis:           SPDX license expression language, Extras
 category:           Data
 description:
@@ -17,27 +17,28 @@ extra-source-files:
   CHANGELOG.md
   README.md
 
-tested-with:
-  GHC ==8.6.5
-   || ==8.8.4
-   || ==8.10.7
-   || ==9.0.2
-   || ==9.2.8
-   || ==9.4.8
-   || ==9.6.6
-   || ==9.8.2
-   || ==9.10.1
+tested-with:        GHC ==9.6.6 || ==9.8.2 || ==9.10.1
 
 source-repository head
   type:     git
   location: https://github.com/phadej/spdx
 
-library
-  default-language: Haskell98
-  exposed-modules:
-    Distribution.SPDX.Extra
-    Distribution.SPDX.Extra.Internal
+common language
+  default-language:   Haskell2010
+  default-extensions:
+    BangPatterns
+    DeriveTraversable
+    GADTs
+    PatternSynonyms
+    RankNTypes
+    RoleAnnotations
+    ScopedTypeVariables
+    StandaloneKindSignatures
+    TypeApplications
 
+library
+  default-language: Haskell2010
+  exposed-modules:  Distribution.SPDX.Extra
   other-extensions:
     CPP
     DeriveDataTypeable
@@ -48,24 +49,41 @@ library
   hs-source-dirs:   src/
   ghc-options:      -Wall
   build-depends:
-    , base          >=4.12.0.0  && <4.21
-    , Cabal-syntax  ^>=3.10.1.0 || ^>=3.12.1.0
-    , containers    >=0.6.0.1   && <0.8
-    , transformers  >=0.5.6.2   && <0.7
+    , base                  >=4.18.2.1  && <4.21
+    , Cabal-syntax          ^>=3.10.3.0 || ^>=3.12.1.0
+    , containers            >=0.6.7     && <0.8
+    , spdx:sat-simple-pure
+    , transformers          >=0.6.1.0   && <0.7
+
+library sat-simple-pure
+  import:          language
+  hs-source-dirs:  sat-simple-pure
+  exposed-modules:
+    Control.Monad.SAT
+    DPLL
+    EST
+    Lifted
+    UnliftedSTRef
+    Vec
+
+  build-depends:
+    , base        >=4.12.0.0 && <4.21
+    , containers  >=0.6.0.1  && <0.8
+    , primitive   ^>=0.9.0.0
 
 test-suite test
   type:             exitcode-stdio-1.0
   main-is:          Tests.hs
   other-modules:    Generators
-  default-language: Haskell98
+  default-language: Haskell2010
   hs-source-dirs:   tests
   ghc-options:      -Wall
   build-depends:
     , base
     , Cabal-syntax
     , spdx
-    , tasty             >=1.1.0.4 && <1.6
-    , tasty-quickcheck  ^>=0.10   || ^>=0.11
+    , tasty             ^>=1.5
+    , tasty-quickcheck  ^>=0.11
 
 benchmark bench
   type:             exitcode-stdio-1.0
@@ -77,6 +95,16 @@ benchmark bench
   build-depends:
     , base
     , Cabal-syntax
-    , QuickCheck        >=2.12.6.1 && <2.16
+    , QuickCheck        ^>=2.15.0.1
     , spdx
-    , tasty-quickcheck  ^>=0.10    || ^>=0.11
+    , tasty-quickcheck  ^>=0.11
+
+test-suite sat-simple-sudoku
+  import:         language
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: examples
+  ghc-options:    -rtsopts
+  main-is:        sat-simple-sudoku.hs
+  build-depends:
+    , base
+    , spdx:sat-simple-pure

@@ -5,12 +5,9 @@ import Distribution.Parsec
 import Distribution.Pretty
 import Distribution.SPDX
 import Distribution.SPDX.Extra
-import Distribution.SPDX.Extra.Internal (LatticeSyntax (..))
 import Generators
 import Test.Tasty
 import Test.Tasty.QuickCheck            as QC
-
-import qualified Distribution.SPDX.Extra.Internal as LS
 
 main :: IO ()
 main = defaultMain tests
@@ -67,20 +64,9 @@ compositeUnits = testGroup "Composite License Expressions"
     up "LGPL-2.1-only OR BSD-3-Clause AND MIT" == EOr (up "LGPL-2.1-only") (EAnd (up "BSD-3-Clause") (up "MIT"))
   ]
 
-lsProps :: TestTree
-lsProps = testGroup "LatticeSyntax"
-  [ QC.testProperty "a ≤ b ⇔ a ∨ b ≡ b ⇔ a ≡ a ∧ b" $ forAll latticeSyntaxGen $ \a -> forAll latticeSyntaxGen $ \b ->
-     let lhs = ((a `LJoin` b) `LS.equivalent` b)
-         rhs = ((a `LMeet` b) `LS.equivalent` a)
-     in label (show lhs) (lhs === rhs)
-  , QC.testProperty "equivalent reflexive" $ forAll latticeSyntaxGen $ \a -> a `LS.equivalent` a
-  , QC.testProperty "preorder reflexive" $ forAll latticeSyntaxGen $ \a -> a `LS.preorder` a
-  ]
-
 qcProps :: TestTree
 qcProps = testGroup "By Quickcheck"
   [ QC.testProperty "licence identifiers are valid licenses" $ forAll licenseIdGen $ valid . prettyShow
-  , lsProps
   , parsePrettyProps
   ]
 
