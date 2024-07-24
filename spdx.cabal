@@ -63,6 +63,7 @@ library sat-simple-pure
     DPLL
     EST
     Lifted
+    SparseSet
     UnliftedSTRef
     Vec
 
