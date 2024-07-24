@@ -1,4 +1,6 @@
-module Lifted where
+module Lifted (
+    Lifted (..),
+) where
 
 import Data.Kind (Type)
 import GHC.Exts  (UnliftedType)

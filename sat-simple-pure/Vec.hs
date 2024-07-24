@@ -1,4 +1,12 @@
-module Vec where
+module Vec (
+    Vec,
+    newVec,
+    sizeofVec,
+    insertVec,
+    readVec,
+    writeVec,
+    shrinkVec,
+) where
 
 import Control.Monad (forM_)
 import Control.Monad.ST (ST)
@@ -49,12 +57,6 @@ readVec (Vec _ arr) i = readArray arr i
 
 writeVec :: Vec s a -> Int -> a -> ST s ()
 writeVec (Vec _ arr) i x = writeArray arr i x
-
-clearVec :: Vec s a -> ST s ()
-clearVec (Vec sizeRef arr) = do
-    size <- readSTRef sizeRef
-    forM_ [0 .. size - 1] $ \i -> writeArray arr i unused
-    writeSTRef sizeRef 0
 
 -- | Shrink vector. New size should be smaller than the current.
 shrinkVec :: Vec s a -> Int -> ST s ()

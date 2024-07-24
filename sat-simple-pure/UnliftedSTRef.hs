@@ -1,6 +1,11 @@
 {-# LANGUAGE MagicHash     #-}
 {-# LANGUAGE UnboxedTuples #-}
-module UnliftedSTRef where
+module UnliftedSTRef (
+    USTRef,
+    newUSTRef,
+    readUSTRef,
+    writeUSTRef,
+) where
 
 import Data.Kind (Type)
 import GHC.Exts  (MutVar#, UnliftedType, newMutVar#, readMutVar#, writeMutVar#)
@@ -12,8 +17,8 @@ type USTRef :: Type -> UnliftedType -> Type
 data USTRef s a = USTRef (MutVar# s a)
 
 newUSTRef :: a -> ST s (USTRef s a)
-newUSTRef init = ST $ \s1# ->
-    case newMutVar# init s1# of { (# s2#, var# #) ->
+newUSTRef x = ST $ \s1# ->
+    case newMutVar# x s1# of { (# s2#, var# #) ->
     (# s2#, USTRef var# #) }
 
 readUSTRef :: USTRef s a -> ST s (Lifted a)
