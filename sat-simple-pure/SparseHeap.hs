@@ -10,6 +10,7 @@ module SparseHeap (
     insertSparseHeap,
     deleteSparseHeap,
     popSparseHeap,
+    popSparseHeap_,
     elemsSparseHeap,
     clearSparseHeap,
     extendSparseHeap,
@@ -285,12 +286,16 @@ swim !_n !dense !sparse !i !x
 -- Just 3
 --
 popSparseHeap :: SparseHeap s -> ST s (Maybe Int)
-popSparseHeap heap@SH {..} = do
+popSparseHeap heap = popSparseHeap_ heap (return Nothing) (return . Just)
+
+{-# INLINE popSparseHeap_ #-}
+popSparseHeap_ :: SparseHeap s -> ST s r -> (Int -> ST s r) -> ST s r
+popSparseHeap_ heap@SH {..} no yes = do
     checkInvariant heap
 
     n <- readPrimVar size
     if n <= 0
-    then return Nothing
+    then no
     else do
         let !j = n - 1
         writePrimVar size j
@@ -301,7 +306,7 @@ popSparseHeap heap@SH {..} = do
         sink j dense sparse 0 y
 
         checkInvariant heap
-        return (Just x)
+        yes x
 
 -- | Clear sparse heap.
 --
@@ -337,6 +342,6 @@ elemsSparseHeap SH {..} = do
 --
 drainSparseHeap :: SparseHeap s -> ST s [Int]
 drainSparseHeap heap = go id where
-    go acc = popSparseHeap heap >>= \case
-        Nothing -> return (acc [])
-        Just x  -> go (acc . (x :))
+    go acc = popSparseHeap_ heap
+        (return (acc []))
+        (\x -> go (acc . (x :)))

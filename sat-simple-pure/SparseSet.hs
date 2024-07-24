@@ -7,6 +7,7 @@ module SparseSet (
     insertSparseSet,
     deleteSparseSet,
     popSparseSet,
+    popSparseSet_,
     elemsSparseSet,
     clearSparseSet,
 ) where
@@ -167,20 +168,25 @@ swap !dense !sparse !i !x !j
 -- | Pop element from the set.
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; popSparseSet set }
--- Just 13
+-- 13
 --
 popSparseSet :: SparseSet s -> ST s (Maybe Int)
-popSparseSet set@SS {..} = do
+popSparseSet set = popSparseSet_ set (return Nothing) (return . Just)
+
+-- by using continuation passing style we can avoid allocating Just constructor.
+{-# INLINE popSparseSet_ #-}
+popSparseSet_ :: SparseSet s -> ST s r -> (Int -> ST s r) -> ST s r
+popSparseSet_ set@SS {..} no yes = do
     checkInvariant set
 
     n <- readPrimVar size
     if n <= 0
-    then return Nothing
+    then no
     else do
         let !n' = n - 1
         x <- readPrimArray dense n'
         writePrimVar size n'
-        return (Just x)
+        yes x
 --
 -- | Clear sparse set.
 --

@@ -165,14 +165,14 @@ deleteVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.delete x)
 clearVarSet :: VarSet s -> ST s ()
 clearVarSet (VS xs) = writeSTRef xs IS.empty
 
-minViewVarSet :: VarSet s -> ST s (Maybe Var)
-minViewVarSet (VS xs) = do
+minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
+minViewVarSet (VS xs) no yes = do
     is <- readSTRef xs
     case IS.minView is of
-        Nothing -> return Nothing
+        Nothing -> no
         Just (x, is') -> do
             writeSTRef xs is'
-            return (Just (MkVar x))
+            yes (MkVar x)
 
 #else
 
@@ -195,10 +195,9 @@ deleteVarSet (MkVar x) (VS xs) = do
 clearVarSet :: VarSet s -> ST s ()
 clearVarSet (VS xs) = clearSparseHeap xs
 
-minViewVarSet :: VarSet s -> ST s (Maybe Var)
-minViewVarSet (VS xs) = do
-    x <- popSparseHeap xs
-    return (coerce x)
+{-# INLINE minViewVarSet #-}
+minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
+minViewVarSet (VS xs) no yes = popSparseHeap_ xs no (coerce yes)
 
 #endif
 
@@ -214,10 +213,9 @@ newLitSet n = LS <$> newSparseSet n
 insertLitSet :: Lit -> LitSet s -> ST s ()
 insertLitSet (MkLit l) (LS ls) = insertSparseSet ls l
 
-minViewLitSet :: LitSet s -> ST s (Maybe Lit)
-minViewLitSet (LS xs) = do
-    x <- popSparseSet xs
-    return (coerce x)
+{-# INLINE minViewLitSet #-}
+minViewLitSet :: LitSet s -> ST s r -> (Lit -> ST s r) -> ST s r
+minViewLitSet (LS xs) no yes = popSparseSet_ xs no (coerce yes)
 
 clearLitSet :: LitSet s -> ST s ()
 clearLitSet (LS xs) = clearSparseSet xs
@@ -477,24 +475,30 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
         False -> conflict solver
         True  -> return True
 
-solveLoop :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
-solveLoop !clauseDb !trail !units !pa !vars = do
-    minViewLitSet units >>= \case
-        Just l -> lookupPartialAssignment l pa >>= \case
+solveLoop :: forall s. ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
+solveLoop !clauseDb !trail !units !pa !vars = minViewLitSet units noUnit yesUnit
+  where
+    yesUnit :: Lit -> ST s Bool
+    yesUnit !l = lookupPartialAssignment l pa >>= \case
             LUndef -> do
                 insertPartialAssignment l pa
                 deleteVarSet (litToVar l) vars
                 unitPropagate l clauseDb (Deduced l trail) units pa vars
             LTrue  -> solveLoop clauseDb trail units pa vars
             LFalse -> backtrack clauseDb trail units pa vars
-        Nothing -> minViewVarSet vars >>= \case
-            Just v -> do
-                -- traceM $ "decide" ++ show v
-                let l = varToLit v
-                insertPartialAssignment l pa
-                unitPropagate l clauseDb (Decided l trail) units pa vars
 
-            Nothing -> return True
+    noUnit :: ST s Bool
+    noUnit = minViewVarSet vars noVar yesVar
+
+    noVar :: ST s Bool
+    noVar = return True
+
+    yesVar :: Var -> ST s Bool
+    yesVar !v = do
+        -- traceM $ "decide" ++ show v
+        let !l = varToLit v
+        insertPartialAssignment l pa
+        unitPropagate l clauseDb (Decided l trail) units pa vars
 
 unitPropagate :: forall s. Lit -> ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
 
@@ -508,7 +512,7 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
     go watches 0 0 size
   where
     go :: Vec s Watch -> Int -> Int -> Int -> ST s Bool
-    go watches !i !j !size
+    go !watches !i !j !size
         | i >= size
         = do
             shrinkVec watches j
