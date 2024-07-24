@@ -91,8 +91,8 @@ checkInvariant _ = return ()
 newSparseHeap
     :: Int -- ^ max integer
     -> ST s (SparseHeap s)
-newSparseHeap capacity' = do
-    let capacity = max 1024 capacity'
+newSparseHeap !capacity' = do
+    let !capacity = max 1024 capacity'
     size <- newPrimVar 0
     dense <- newPrimArray capacity
     sparse <- newPrimArray capacity

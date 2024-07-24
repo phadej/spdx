@@ -239,7 +239,7 @@ newtype ClauseDB s = CDB (MutableArray s (Vec s Watch))
 data Watch = W !Lit !Clause2
 
 newClauseDB :: Int -> ST s (ClauseDB s)
-newClauseDB size = do
+newClauseDB !size = do
     arr <- newArray size undefined
 
     forM_ [0 .. size - 1] $ \i -> do
@@ -249,7 +249,7 @@ newClauseDB size = do
     return (CDB arr)
 
 insertClauseDB :: Lit -> Lit -> Clause2 -> ClauseDB s -> ST s ()
-insertClauseDB l1 l2 clause cdb = do
+insertClauseDB !l1 !l2 !clause !cdb = do
     insertWatch l1 (W l2 clause) cdb
     insertWatch l2 (W l1 clause) cdb
 
@@ -294,21 +294,21 @@ data Satisfied
   deriving Show
 
 satisfied :: PartialAssignment s -> Clause -> ST s Satisfied
-satisfied pa = go0 where
+satisfied !pa = go0 where
     go0 []     = return Conflicting
     go0 (l:ls) = lookupPartialAssignment l pa >>= \case
         LUndef -> go1 l ls
         LTrue  -> return Satisfied
         LFalse -> go0 ls
 
-    go1 l1 []     = return (Unit l1)
-    go1 l1 (l:ls) = lookupPartialAssignment l pa >>= \case
+    go1 !l1 []     = return (Unit l1)
+    go1 !l1 (l:ls) = lookupPartialAssignment l pa >>= \case
         LUndef -> go2 l1 l [] ls
         LTrue  -> return Satisfied
         LFalse -> go1 l1 ls
 
-    go2 l1 l2 acc []     = return (Unresolved (MkClause2 l1 l2 (primArrayFromList acc)))
-    go2 l1 l2 acc (l:ls) = lookupPartialAssignment l pa >>= \case
+    go2 !l1 !l2 acc []     = return (Unresolved (MkClause2 l1 l2 (primArrayFromList acc)))
+    go2 !l1 !l2 acc (l:ls) = lookupPartialAssignment l pa >>= \case
         LUndef -> go2 l1 l2 (l : acc) ls
         LTrue  -> return Satisfied
         LFalse -> go2 l1 l2 acc ls
@@ -328,7 +328,7 @@ data Satisfied_
   deriving Show
 
 satisfied2_ :: PartialAssignment s -> Clause2 -> ST s Satisfied_
-satisfied2_ pa (MkClause2 l1 l2 ls) = go0
+satisfied2_ !pa !(MkClause2 l1 l2 ls) = go0
   where
     !len = sizeofPrimArray ls
 
@@ -350,7 +350,7 @@ satisfied2_ pa (MkClause2 l1 l2 ls) = go0
         LTrue  -> return Satisfied_
         LFalse -> goNone 0
 
-    goNone i
+    goNone !i
         | i >= len
         = return Conflicting_
 
@@ -361,7 +361,7 @@ satisfied2_ pa (MkClause2 l1 l2 ls) = go0
             LTrue  -> return Satisfied_
             LFalse -> goNone (i + 1)
 
-    goOne k1 i
+    goOne !k1 !i
         | i >= len
         = return (Unit_ k1)
 
@@ -372,7 +372,7 @@ satisfied2_ pa (MkClause2 l1 l2 ls) = go0
             LTrue  -> return Satisfied_
             LFalse -> goOne k1 (i + 1)
 
-    goTwo k1 k2 i
+    goTwo !k1 !k2 !i
         | i >= len
         = return (Unresolved_ k1 k2)
 
@@ -508,7 +508,7 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
     go watches 0 0 size
   where
     go :: Vec s Watch -> Int -> Int -> Int -> ST s Bool
-    go watches i j size
+    go watches !i !j !size
         | i >= size
         = do
             shrinkVec watches j
@@ -519,7 +519,7 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
             Conflicting_      -> do
                 writeVec watches j w
 
-                let copy i' j' =
+                let copy !i' !j' =
                         if i' < size
                         then do
                             w' <- readVec watches i'
