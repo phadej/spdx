@@ -31,9 +31,9 @@ import Data.Primitive.PrimVar
 -- i.e. pop returns minimum element.
 --
 data SparseHeap s = SH
-    { size   :: !(PrimVar s Int)
-    , dense  :: !(MutablePrimArray s Int)
-    , sparse :: !(MutablePrimArray s Int)
+    { size   :: {-# UNPACK #-} !(PrimVar s Int)
+    , dense  :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    , sparse :: {-# UNPACK #-} !(MutablePrimArray s Int)
     }
 
 _invariant :: SparseHeap s -> ST s ()
@@ -159,7 +159,7 @@ insertSparseHeap heap@SH {..} x = do
     else insert n
   where
     {-# INLINE insert #-}
-    insert n = do
+    insert !n = do
         writePrimArray dense n x
         writePrimArray sparse x n
         writePrimVar size (n + 1)
@@ -198,7 +198,7 @@ deleteSparseHeap heap@SH {..} x = do
     else return ()
   where
     {-# INLINE delete #-}
-    delete i n = do
+    delete !i !n = do
         let !j = n - 1
         writePrimVar size j
 

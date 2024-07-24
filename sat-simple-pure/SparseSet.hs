@@ -24,9 +24,9 @@ import Data.Primitive.PrimVar
 -- An 'Int' set which support efficient popping ('popSparseSet').
 --
 data SparseSet s = SS
-    { size   :: !(PrimVar s Int)
-    , dense  :: !(MutablePrimArray s Int)
-    , sparse :: !(MutablePrimArray s Int)
+    { size   :: {-# UNPACK #-} !(PrimVar s Int)
+    , dense  :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    , sparse :: {-# UNPACK #-} !(MutablePrimArray s Int)
     }
 
 _invariant :: SparseSet s -> ST s ()
