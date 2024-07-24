@@ -29,6 +29,7 @@ unused = unsafeCoerce ()
 
 sizeofVec :: Vec s a -> ST s Int
 sizeofVec (Vec size _) = readPrimVar size
+{-# INLINE sizeofVec #-}
 
 -- | Insert at the end: @push_back@
 --

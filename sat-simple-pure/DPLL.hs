@@ -18,15 +18,15 @@ module DPLL (
 ) where
 
 #define TWO_WATCHED_LITERALS
+-- #define INTSET_VARS
 
 import Control.Monad.ST         (ST)
 import Data.Bits                (complementBit, testBit, unsafeShiftL, unsafeShiftR)
 import Data.Coerce              (coerce)
 import Data.Functor             ((<&>))
-import Data.IntSet              (IntSet)
 import Data.Primitive.PrimArray (PrimArray, indexPrimArray, primArrayFromList, sizeofPrimArray)
 import Data.Primitive.Types     (Prim)
-import Data.STRef               (STRef, modifySTRef, newSTRef, readSTRef, writeSTRef)
+import Data.STRef               (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word                (Word8)
 
 import Data.Primitive.ByteArray
@@ -43,7 +43,13 @@ import Data.Primitive.Array (MutableArray, newArray, readArray, sizeofMutableArr
 import Vec
 #endif
 
-import qualified Data.IntSet as IntSet
+#ifdef INTSET_VARS
+import qualified Data.IntSet as IS
+import           Data.STRef  (modifySTRef)
+#else
+import SparseHeap
+#endif
+
 
 -- import Debug.Trace
 
@@ -141,21 +147,60 @@ deletePartialAssignment (MkLit l) (PA ref) = do
 -- VarSet
 -------------------------------------------------------------------------------
 
-newtype VarSet = VS IntSet
+#ifdef INTSET_VARS
+newtype VarSet s = VS (STRef s IS.IntSet)
 
-emptyVarSet :: VarSet
-emptyVarSet = VS IntSet.empty
+newVarSet :: ST s (VarSet s)
+newVarSet = VS <$> newSTRef IS.empty
 
-insertVarSet :: Var -> VarSet -> VarSet
-insertVarSet (MkVar x) (VS xs) = VS (IntSet.insert x xs)
+extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
+extendVarSet _ x = return x
 
-deleteVarSet :: Var -> VarSet -> VarSet
-deleteVarSet (MkVar x) (VS xs) = VS (IntSet.delete x xs)
+insertVarSet :: Var -> VarSet s -> ST s ()
+insertVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.insert x)
 
-minViewVarSet :: VarSet -> Maybe (Var, VarSet)
-minViewVarSet (VS xs) = case IntSet.minView xs of
-    Nothing -> Nothing
-    Just (x, xs') -> Just (MkVar x, VS xs')
+deleteVarSet :: Var -> VarSet s -> ST s ()
+deleteVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.delete x)
+
+clearVarSet :: VarSet s -> ST s ()
+clearVarSet (VS xs) = writeSTRef xs IS.empty
+
+minViewVarSet :: VarSet s -> ST s (Maybe Var)
+minViewVarSet (VS xs) = do
+    is <- readSTRef xs
+    case IS.minView is of
+        Nothing -> return Nothing
+        Just (x, is') -> do
+            writeSTRef xs is'
+            return (Just (MkVar x))
+
+#else
+
+newtype VarSet s = VS (SparseHeap s)
+
+newVarSet :: ST s (VarSet s)
+newVarSet = VS <$> newSparseHeap 0
+
+extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
+extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
+
+insertVarSet :: Var -> VarSet s -> ST s ()
+insertVarSet (MkVar x) (VS xs) = do
+    insertSparseHeap xs x
+
+deleteVarSet :: Var -> VarSet s -> ST s ()
+deleteVarSet (MkVar x) (VS xs) = do
+    deleteSparseHeap xs x
+
+clearVarSet :: VarSet s -> ST s ()
+clearVarSet (VS xs) = clearSparseHeap xs
+
+minViewVarSet :: VarSet s -> ST s (Maybe Var)
+minViewVarSet (VS xs) = do
+    x <- popSparseHeap xs
+    return (coerce x)
+
+#endif
 
 -------------------------------------------------------------------------------
 -- LitSet
@@ -347,7 +392,7 @@ data Solver s = Solver
     { ok        :: !(STRef s Bool)
     , nextLit   :: !(STRef s Int)
     , solution  :: !(PartialAssignment s)
-    , variables :: !(STRef s VarSet)
+    , variables :: !(STRef s (VarSet s))
     , clauses   :: !(STRef s Clauses)
     }
 
@@ -357,7 +402,7 @@ newSolver = do
     ok        <- newSTRef True
     nextLit   <- newSTRef 0
     solution  <- newPartialAssignment
-    variables <- newSTRef emptyVarSet
+    variables <- newVarSet >>= newSTRef
     clauses   <- newSTRef []
     return Solver {..}
 
@@ -368,7 +413,13 @@ newLit Solver {..} = do
     l' <- readSTRef nextLit
     writeSTRef nextLit (l' + 2)
     let l = MkLit l'
-    modifySTRef variables (insertVarSet (litToVar l))
+
+    -- add unsolver variable.
+    vars <- readSTRef variables
+    vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
+    insertVarSet (litToVar l) vars'
+    writeSTRef variables vars'
+
     return l
 
 addClause :: Solver s -> [Lit] -> ST s Bool
@@ -386,7 +437,7 @@ addClause solver@Solver {..} clause = do
                 return True
             Unit l -> do
                 insertPartialAssignment l solution
-                modifySTRef variables (deleteVarSet (litToVar l))
+                readSTRef variables >>= deleteVarSet (litToVar l)
                 return True
     else return False
 
@@ -395,6 +446,7 @@ conflict Solver {..} = do
     writeSTRef ok False
     clearPartialAssignment solution
     writeSTRef clauses []
+    readSTRef variables >>= clearVarSet
     return False
 
 data Trail
@@ -425,28 +477,26 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
         False -> conflict solver
         True  -> return True
 
-solveLoop :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
+solveLoop :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
 solveLoop !clauseDb !trail !units !pa !vars = do
     minViewLitSet units >>= \case
         Just l -> lookupPartialAssignment l pa >>= \case
             LUndef -> do
                 insertPartialAssignment l pa
-                let !vars' = deleteVarSet (litToVar l) vars
-                unitPropagate l clauseDb (Deduced l trail) units pa vars'
+                deleteVarSet (litToVar l) vars
+                unitPropagate l clauseDb (Deduced l trail) units pa vars
             LTrue  -> solveLoop clauseDb trail units pa vars
             LFalse -> backtrack clauseDb trail units pa vars
-        Nothing
-            | Just (v, vars') <- minViewVarSet vars
-            -> do
+        Nothing -> minViewVarSet vars >>= \case
+            Just v -> do
                 -- traceM $ "decide" ++ show v
                 let l = varToLit v
                 insertPartialAssignment l pa
-                unitPropagate l clauseDb (Decided l trail) units pa vars'
+                unitPropagate l clauseDb (Decided l trail) units pa vars
 
-            | otherwise
-            -> return True
+            Nothing -> return True
 
-unitPropagate :: forall s. Lit -> ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
+unitPropagate :: forall s. Lit -> ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
 
 #ifdef TWO_WATCHED_LITERALS
 
@@ -517,11 +567,12 @@ unitPropagate !_ !clauseDb !trail !units !pa !vars = go clauseDb
         Unresolved_ _ _ -> go cs
 #endif
 
-backtrack :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
+backtrack :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
 backtrack !_clauseDb End               !_units !_pa !_vars = return False
 backtrack   clauseDb (Deduced l trail)   units   pa   vars = do
     deletePartialAssignment l pa
-    backtrack clauseDb trail units pa (insertVarSet (litToVar l) vars)
+    insertVarSet (litToVar l) vars
+    backtrack clauseDb trail units pa vars
 backtrack  clauseDb (Decided l trail)    units   pa   vars = do
     deletePartialAssignment l pa
     insertPartialAssignment (neg l) pa
@@ -536,25 +587,25 @@ backtrack  clauseDb (Decided l trail)    units   pa   vars = do
 simplify :: Solver s -> ST s Bool
 simplify solver@Solver {..} = whenOk ok $ do
     clauses0 <- readSTRef clauses
-    vars0    <- readSTRef variables
+    vars     <- readSTRef variables
 
-    simplifyLoop [] solution clauses0 vars0 >>= \case
+    simplifyLoop [] solution clauses0 vars >>= \case
         Nothing -> conflict solver
-        Just (clauses1, vars1) -> do
+        Just clauses1 -> do
             writeSTRef clauses clauses1
-            writeSTRef variables vars1
             -- traceM $ "simplify " ++ show (length pa0, length pa1, IntSet.size vars0, IntSet.size vars1)
             return True
 
-simplifyLoop :: [Clause2] -> PartialAssignment s -> [Clause2] -> VarSet -> ST s (Maybe ([Clause2], VarSet))
-simplifyLoop !acc !_  []     !vars = return (Just (acc, vars))
-simplifyLoop !acc !pa (c:cs) !vars = satisfied2_ pa c >>= \case
+simplifyLoop :: [Clause2] -> PartialAssignment s -> [Clause2] -> VarSet s -> ST s (Maybe [Clause2])
+simplifyLoop !acc !_  []     !_vars = return (Just acc)
+simplifyLoop  acc  pa (c:cs)   vars = satisfied2_ pa c >>= \case
     Conflicting_    -> return Nothing
     Satisfied_      -> simplifyLoop acc     pa cs vars
     Unresolved_ _ _ -> simplifyLoop (c:acc) pa cs vars
     Unit_ l         -> do
         insertPartialAssignment l pa
-        simplifyLoop [] pa (acc ++ cs) (deleteVarSet (litToVar l) vars)
+        deleteVarSet (litToVar l) vars
+        simplifyLoop [] pa (acc ++ cs) vars
 
 -------------------------------------------------------------------------------
 -- queries
