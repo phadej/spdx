@@ -21,6 +21,7 @@ module DPLL (
 
 import Control.Monad.ST         (ST)
 import Data.Bits                (complementBit, testBit, unsafeShiftL, unsafeShiftR)
+import Data.Coerce              (coerce)
 import Data.Functor             ((<&>))
 import Data.IntSet              (IntSet)
 import Data.Primitive.PrimArray (PrimArray, indexPrimArray, primArrayFromList, sizeofPrimArray)
@@ -33,6 +34,7 @@ import Data.Primitive.ByteArray
        resizeMutableByteArray, shrinkMutableByteArray, writeByteArray)
 
 import Lifted
+import SparseSet
 import UnliftedSTRef
 
 #ifdef TWO_WATCHED_LITERALS
@@ -159,18 +161,21 @@ minViewVarSet (VS xs) = case IntSet.minView xs of
 -- LitSet
 -------------------------------------------------------------------------------
 
-newtype LitSet = LS IntSet
+newtype LitSet s = LS (SparseSet s)
 
-emptyLitSet :: LitSet
-emptyLitSet = LS IntSet.empty
+newLitSet :: Int -> ST s (LitSet s)
+newLitSet n = LS <$> newSparseSet n
 
-insertLitSet :: Lit -> LitSet -> LitSet
-insertLitSet (MkLit l) (LS ls) = LS (IntSet.insert l ls)
+insertLitSet :: Lit -> LitSet s -> ST s ()
+insertLitSet (MkLit l) (LS ls) = insertSparseSet ls l
 
-minViewLitSet :: LitSet -> Maybe (Lit, LitSet)
-minViewLitSet (LS xs) = case IntSet.minView xs of
-    Nothing -> Nothing
-    Just (x, xs') -> Just (MkLit x, LS xs')
+minViewLitSet :: LitSet s -> ST s (Maybe Lit)
+minViewLitSet (LS xs) = do
+    x <- popSparseSet xs
+    return (coerce x)
+
+clearLitSet :: LitSet s -> ST s ()
+clearLitSet (LS xs) = clearSparseSet xs
 
 -------------------------------------------------------------------------------
 -- Clauses
@@ -404,8 +409,10 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     vars     <- readSTRef variables
     -- traceM $ "solve " ++ show (length clauses')
 
-#ifdef TWO_WATCHED_LITERALS
     litCount <- readSTRef nextLit
+    units <- newLitSet litCount
+
+#ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
     forM_ clauses' $ \c -> satisfied2_ solution c >>= \case
         Unresolved_ l1 l2 -> insertClauseDB l1 l2 c clauseDB
@@ -414,32 +421,32 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     let clauseDB = clauses'
 #endif
 
-    solveLoop clauseDB End emptyLitSet solution vars >>= \case
+    solveLoop clauseDB End units solution vars >>= \case
         False -> conflict solver
         True  -> return True
 
-solveLoop :: ClauseDB s -> Trail -> LitSet -> PartialAssignment s -> VarSet -> ST s Bool
-solveLoop !clauseDb !trail !units !pa !vars
-    | Just (l, units') <- minViewLitSet units
-    = lookupPartialAssignment l pa >>= \case
-        LUndef -> do
-            insertPartialAssignment l pa
-            let !vars' = deleteVarSet (litToVar l) vars
-            unitPropagate l clauseDb (Deduced l trail) units pa vars'
-        LTrue  -> solveLoop clauseDb trail units' pa vars
-        LFalse -> backtrack clauseDb trail pa vars
+solveLoop :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
+solveLoop !clauseDb !trail !units !pa !vars = do
+    minViewLitSet units >>= \case
+        Just l -> lookupPartialAssignment l pa >>= \case
+            LUndef -> do
+                insertPartialAssignment l pa
+                let !vars' = deleteVarSet (litToVar l) vars
+                unitPropagate l clauseDb (Deduced l trail) units pa vars'
+            LTrue  -> solveLoop clauseDb trail units pa vars
+            LFalse -> backtrack clauseDb trail units pa vars
+        Nothing
+            | Just (v, vars') <- minViewVarSet vars
+            -> do
+                -- traceM $ "decide" ++ show v
+                let l = varToLit v
+                insertPartialAssignment l pa
+                unitPropagate l clauseDb (Decided l trail) units pa vars'
 
-    | Just (v, vars') <- minViewVarSet vars
-    = do
-        -- traceM $ "decide" ++ show v
-        let l = varToLit v
-        insertPartialAssignment l pa
-        unitPropagate l clauseDb (Decided l trail) emptyLitSet pa vars'
+            | otherwise
+            -> return True
 
-    | otherwise
-    = return True
-
-unitPropagate :: forall s. Lit -> ClauseDB s -> Trail -> LitSet -> PartialAssignment s -> VarSet -> ST s Bool
+unitPropagate :: forall s. Lit -> ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
 
 #ifdef TWO_WATCHED_LITERALS
 
@@ -448,14 +455,14 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
     -- traceM $ "unitPropagate " ++ show (l, dbSize)
     watches <- lookupClauseDB (neg l) clauseDb
     size <- sizeofVec watches
-    go units watches 0 0 size
+    go watches 0 0 size
   where
-    go :: LitSet -> Vec s Watch -> Int -> Int -> Int -> ST s Bool
-    go !us watches i j size
+    go :: Vec s Watch -> Int -> Int -> Int -> ST s Bool
+    go watches i j size
         | i >= size
         = do
             shrinkVec watches j
-            solveLoop clauseDb trail us pa vars
+            solveLoop clauseDb trail units pa vars
 
         | otherwise
         = readVec watches i >>= \ w@(W l' c) -> satisfied2_ pa c >>= \case
@@ -473,49 +480,53 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
 
                 copy (i + 1) (j + 1)
 
-                backtrack clauseDb trail pa vars
+                backtrack clauseDb trail units pa vars
             Satisfied_        -> do
                 writeVec watches j w
-                go us watches (i + 1) (j + 1) size
+                go watches (i + 1) (j + 1) size
             Unit_ u           -> do
                 writeVec watches j w
-                go (insertLitSet u us) watches (i + 1) (j + 1) size
+                insertLitSet u units
+                go watches (i + 1) (j + 1) size
             Unresolved_ l1 l2
                 | l2 /= l', l2 /= l
                 -> do
                     insertWatch l2 w clauseDb
-                    go us watches (i + 1) j size
+                    go watches (i + 1) j size
 
                 | l1 /= l', l1 /= l
                 -> do
                     insertWatch l1 w clauseDb
-                    go us watches (i + 1) j size
+                    go watches (i + 1) j size
 
                 | otherwise
                 -> error ("watch" ++ show (l, l1, l2, l'))
 
 #else
 
-unitPropagate !_ !clauseDb !trail !units !pa !vars = go units clauseDb
+unitPropagate !_ !clauseDb !trail !units !pa !vars = go clauseDb
   where
-    go :: LitSet -> [Clause2] -> ST s Bool
-    go us []     = solveLoop clauseDb trail us pa vars
-    go us (c:cs) = satisfied2_ pa c >>= \case
-        Conflicting_    -> backtrack clauseDb trail pa vars
-        Satisfied_      -> go us cs
-        Unit_ u         -> go (insertLitSet u us) cs
-        Unresolved_ _ _ -> go us cs
+    go :: [Clause2] -> ST s Bool
+    go []     = solveLoop clauseDb trail units pa vars
+    go (c:cs) = satisfied2_ pa c >>= \case
+        Conflicting_    -> backtrack clauseDb trail units pa vars
+        Satisfied_      -> go cs
+        Unit_ u         -> do
+            insertLitSet u units
+            go cs
+        Unresolved_ _ _ -> go cs
 #endif
 
-backtrack :: ClauseDB s -> Trail -> PartialAssignment s -> VarSet -> ST s Bool
-backtrack !_clauseDb End               !_pa !_vars = return False
-backtrack   clauseDb (Deduced l trail)   pa   vars = do
+backtrack :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet -> ST s Bool
+backtrack !_clauseDb End               !_units !_pa !_vars = return False
+backtrack   clauseDb (Deduced l trail)   units   pa   vars = do
     deletePartialAssignment l pa
-    backtrack clauseDb trail pa (insertVarSet (litToVar l) vars)
-backtrack  clauseDb (Decided l trail) pa vars = do
+    backtrack clauseDb trail units pa (insertVarSet (litToVar l) vars)
+backtrack  clauseDb (Decided l trail)    units   pa   vars = do
     deletePartialAssignment l pa
     insertPartialAssignment (neg l) pa
-    unitPropagate (neg l) clauseDb (Deduced (neg l) trail) emptyLitSet pa vars
+    clearLitSet units
+    unitPropagate (neg l) clauseDb (Deduced (neg l) trail) units pa vars
 
 -------------------------------------------------------------------------------
 -- simplify

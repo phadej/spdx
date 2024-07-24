@@ -5,9 +5,10 @@ module SparseSet (
     insertSparseSet,
     popSparseSet,
     elemsSparseSet,
+    clearSparseSet,
 ) where
 
-import Control.Monad.ST (ST)
+import Control.Monad.ST         (ST)
 import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
 
@@ -70,7 +71,7 @@ insertSparseSet (SS size dense sparse) x = do
         writePrimArray sparse x n
         writePrimVar size (n + 1)
 
--- | Pop element from the set
+-- | Pop element from the set.
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; popSparseSet set }
 -- Just 13
@@ -86,6 +87,15 @@ popSparseSet (SS size dense _sparse) = do
         writePrimVar size n'
         return (Just i)
 
+-- | Clear sparse set.
+--
+-- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; clearSparseSet set; elemsSparseSet set }
+-- []
+--
+clearSparseSet :: SparseSet s -> ST s ()
+clearSparseSet (SS size _ _) = do
+    writePrimVar size 0
+
 -- | Elements of the set
 elemsSparseSet :: SparseSet s -> ST s [Int]
 elemsSparseSet (SS size dense _sparse) = do
@@ -97,6 +107,6 @@ elemsSparseSet (SS size dense _sparse) = do
         = do
             x <- readPrimArray dense i
             go (x : acc) (i + 1) n
-        
+
         | otherwise
         = return acc

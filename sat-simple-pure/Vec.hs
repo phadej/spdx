@@ -8,11 +8,11 @@ module Vec (
     shrinkVec,
 ) where
 
-import Control.Monad (forM_)
-import Control.Monad.ST (ST)
+import Control.Monad          (forM_)
+import Control.Monad.ST       (ST)
 import Data.Primitive.Array
 import Data.Primitive.PrimVar
-import Unsafe.Coerce (unsafeCoerce)
+import Unsafe.Coerce          (unsafeCoerce)
 
 data Vec s a = Vec {-# UNPACK #-} !(PrimVar s Int) {-# UNPACK #-} !(MutableArray s a)
 

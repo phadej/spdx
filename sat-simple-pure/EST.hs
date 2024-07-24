@@ -11,9 +11,7 @@ module EST (
     earlyExitEST,
 ) where
 
-import GHC.Exts
-       (PromptTag#, State#, control0#, newPromptTag#, oneShot, prompt#, runRW#,
-       unsafeCoerce#)
+import GHC.Exts (PromptTag#, State#, control0#, newPromptTag#, oneShot, prompt#, runRW#, unsafeCoerce#)
 import GHC.ST   (ST (..))
 
 control0##
