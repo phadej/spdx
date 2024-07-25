@@ -1,2 +1,3 @@
 branches: master
 installed: +all -Cabal-syntax
+docspec: True
