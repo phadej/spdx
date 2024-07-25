@@ -3,6 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MagicHash                  #-}
+{-# LANGUAGE NoFieldSelectors           #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
@@ -34,6 +35,7 @@ import Data.Primitive.ByteArray
        (MutableByteArray (..), MutableByteArray#, getSizeofMutableByteArray, newByteArray, readByteArray,
        resizeMutableByteArray, shrinkMutableByteArray, writeByteArray)
 
+import LCG
 import Lifted
 import SparseSet
 import UnliftedSTRef
@@ -48,7 +50,7 @@ import Vec
 import qualified Data.IntSet as IS
 import           Data.STRef  (modifySTRef)
 #else
-import SparseHeap
+import SparseMaxHeap
 #endif
 
 
@@ -189,8 +191,7 @@ extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
 
 weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
-weightVarSet _ _ _ = return ()
--- weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
+weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
 
 insertVarSet :: Var -> VarSet s -> ST s ()
 insertVarSet (MkVar x) (VS xs) = do
@@ -401,6 +402,7 @@ data Solver s = Solver
     , solution  :: !(PartialAssignment s)
     , variables :: !(STRef s (VarSet s))
     , clauses   :: !(STRef s Clauses)
+    , lcg       :: !(LCG s)
     }
 
 -- | Create new solver
@@ -411,6 +413,7 @@ newSolver = do
     solution  <- newPartialAssignment
     variables <- newVarSet >>= newSTRef
     clauses   <- newSTRef []
+    lcg       <- newLCG 44
     return Solver {..}
 
 -- | Create fresh literal
@@ -421,12 +424,15 @@ newLit Solver {..} = do
     writeSTRef nextLit (l' + 2)
     let l = MkLit l'
 
-    -- add unsolver variable.
+    -- add unsolved variable.
     vars <- readSTRef variables
     vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
-    weightVarSet (litToVar l) (\_ -> - l') vars'
-    insertVarSet (litToVar l) vars'
     writeSTRef variables vars'
+
+    weightVarSet (litToVar l) (\_ -> - l') vars'
+    -- w <- nextLCG lcg
+    -- weightVarSet (litToVar l) (\_ -> fromIntegral w) vars'
+    insertVarSet (litToVar l) vars'
 
     return l
 
