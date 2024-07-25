@@ -490,7 +490,7 @@ solveLoop !clauseDb !trail !units !pa !vars = minViewLitSet units noUnit yesUnit
                 deleteVarSet (litToVar l) vars
                 unitPropagate l clauseDb (Deduced l trail) units pa vars
             LTrue  -> solveLoop clauseDb trail units pa vars
-            LFalse -> backtrack clauseDb trail units pa vars
+            LFalse -> backtrack clauseDb units pa vars trail
 
     noUnit :: ST s Bool
     noUnit = minViewVarSet vars noVar yesVar
@@ -540,7 +540,7 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
 
                         copy (i + 1) (j + 1)
 
-                        backtrack clauseDb trail units pa vars
+                        backtrack clauseDb units pa vars trail
                     Satisfied_        -> do
                         writeVec watches j w
                         go watches (i + 1) (j + 1) size
@@ -570,7 +570,7 @@ unitPropagate !_ !clauseDb !trail !units !pa !vars = go clauseDb
     go :: [Clause2] -> ST s Bool
     go []     = solveLoop clauseDb trail units pa vars
     go (c:cs) = satisfied2_ pa c $ \case
-        Conflicting_    -> backtrack clauseDb trail units pa vars
+        Conflicting_    -> backtrack clauseDb units pa vars trail
         Satisfied_      -> go cs
         Unit_ u         -> do
             insertLitSet u units
@@ -578,17 +578,19 @@ unitPropagate !_ !clauseDb !trail !units !pa !vars = go clauseDb
         Unresolved_ _ _ -> go cs
 #endif
 
-backtrack :: ClauseDB s -> Trail -> LitSet s -> PartialAssignment s -> VarSet s -> ST s Bool
-backtrack !_clauseDb End               !_units !_pa !_vars = return False
-backtrack   clauseDb (Deduced l trail)   units   pa   vars = do
-    deletePartialAssignment l pa
-    insertVarSet (litToVar l) vars
-    backtrack clauseDb trail units pa vars
-backtrack  clauseDb (Decided l trail)    units   pa   vars = do
-    deletePartialAssignment l pa
-    insertPartialAssignment (neg l) pa
-    clearLitSet units
-    unitPropagate (neg l) clauseDb (Deduced (neg l) trail) units pa vars
+backtrack :: ClauseDB s -> LitSet s -> PartialAssignment s -> VarSet s -> Trail -> ST s Bool
+backtrack !clauseDb !units !pa !vars = go
+  where
+    go End               = return False
+    go (Deduced l trail) = do
+        deletePartialAssignment l pa
+        insertVarSet (litToVar l) vars
+        go trail
+    go (Decided l trail) = do
+        deletePartialAssignment l pa
+        insertPartialAssignment (neg l) pa
+        clearLitSet units
+        unitPropagate (neg l) clauseDb (Deduced (neg l) trail) units pa vars
 
 -------------------------------------------------------------------------------
 -- simplify
