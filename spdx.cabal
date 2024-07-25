@@ -64,6 +64,7 @@ library sat-simple-pure
     EST
     Lifted
     SparseHeap
+    SparseMaxHeap
     SparseSet
     UnliftedSTRef
     Vec

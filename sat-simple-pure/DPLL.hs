@@ -157,6 +157,9 @@ newVarSet = VS <$> newSTRef IS.empty
 extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet _ x = return x
 
+weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
+weightVarSet _ _ _ = return ()
+
 insertVarSet :: Var -> VarSet s -> ST s ()
 insertVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.insert x)
 
@@ -184,6 +187,10 @@ newVarSet = VS <$> newSparseHeap 0
 
 extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
+
+weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
+weightVarSet _ _ _ = return ()
+-- weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
 
 insertVarSet :: Var -> VarSet s -> ST s ()
 insertVarSet (MkVar x) (VS xs) = do
@@ -417,6 +424,7 @@ newLit Solver {..} = do
     -- add unsolver variable.
     vars <- readSTRef variables
     vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
+    weightVarSet (litToVar l) (\_ -> - l') vars'
     insertVarSet (litToVar l) vars'
     writeSTRef variables vars'
 

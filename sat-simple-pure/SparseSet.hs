@@ -168,7 +168,7 @@ swap !dense !sparse !i !x !j
 -- | Pop element from the set.
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; popSparseSet set }
--- 13
+-- Just 13
 --
 popSparseSet :: SparseSet s -> ST s (Maybe Int)
 popSparseSet set = popSparseSet_ set (return Nothing) (return . Just)
