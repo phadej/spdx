@@ -1,5 +1,7 @@
-{-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
+{-# LANGUAGE LambdaCase      #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RecordWildCards #-}
+-- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module SparseHeap (
     SparseHeap,
     sizeofSparseHeap,
@@ -8,6 +10,7 @@ module SparseHeap (
     insertSparseHeap,
     deleteSparseHeap,
     popSparseHeap,
+    popSparseHeap_,
     elemsSparseHeap,
     clearSparseHeap,
     extendSparseHeap,
@@ -28,10 +31,14 @@ import Data.Primitive.PrimVar
 --
 -- i.e. pop returns minimum element.
 --
-data SparseHeap s = SS (PrimVar s Int) (MutablePrimArray s Int) (MutablePrimArray s Int)
+data SparseHeap s = SH
+    { size   :: {-# UNPACK #-} !(PrimVar s Int)
+    , dense  :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    , sparse :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    }
 
 _invariant :: SparseHeap s -> ST s ()
-_invariant (SS size dense sparse) = do
+_invariant SH {..} = do
     n         <- readPrimVar size
     capacity  <- getSizeofMutablePrimArray dense
     capacity' <- getSizeofMutablePrimArray sparse
@@ -77,7 +84,7 @@ checkInvariant :: SparseHeap s -> ST s ()
 checkInvariant _ = return ()
 {-# INLINE checkInvariant #-}
 
--- | Create new sparse heap
+-- | Create new sparse heap.
 --
 -- >>> runST $ newSparseHeap 100 >>= elemsSparseHeap
 -- []
@@ -85,12 +92,12 @@ checkInvariant _ = return ()
 newSparseHeap
     :: Int -- ^ max integer
     -> ST s (SparseHeap s)
-newSparseHeap capacity' = do
-    let capacity = max 1024 capacity'
+newSparseHeap !capacity' = do
+    let !capacity = max 1024 capacity'
     size <- newPrimVar 0
     dense <- newPrimArray capacity
     sparse <- newPrimArray capacity
-    return (SS size dense sparse)
+    return SH {..}
 
 -- | Size of sparse heap.
 --
@@ -98,22 +105,24 @@ newSparseHeap capacity' = do
 -- 5
 --
 sizeofSparseHeap :: SparseHeap s -> ST s Int
-sizeofSparseHeap (SS size _ _) = readPrimVar size
+sizeofSparseHeap SH {..} = readPrimVar size
 
 -- | Extend sparse heap to fit new capacity.
 extendSparseHeap
     :: Int -- ^ new capacity
     -> SparseHeap s
     -> ST s (SparseHeap s)
-extendSparseHeap capacity1 (SS size dense sparse) = do
+extendSparseHeap capacity1 SH {..} = do
     capacity2 <- getSizeofMutablePrimArray dense
     let capacity' = max capacity2 capacity1 - 1
     let capacity = unsafeShiftL 1 (finiteBitSize (0 :: Int) - countLeadingZeros capacity')
+
     dense' <- resizeMutablePrimArray dense capacity
     sparse' <- resizeMutablePrimArray sparse capacity
-    return (SS size dense' sparse')
 
--- | Test for membership
+    return SH { size, dense = dense', sparse = sparse' }
+
+-- | Test for membership.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; memberSparseHeap set 10 }
 -- False
@@ -122,7 +131,9 @@ extendSparseHeap capacity1 (SS size dense sparse) = do
 -- True
 --
 memberSparseHeap :: SparseHeap s -> Int -> ST s Bool
-memberSparseHeap (SS size dense sparse) x = do
+memberSparseHeap heap@SH {..} x = do
+    checkInvariant heap
+
     n <- readPrimVar size
     i <- readPrimArray sparse x
     if 0 <= i && i < n
@@ -131,14 +142,15 @@ memberSparseHeap (SS size dense sparse) x = do
         return (x' == x)
     else return False
 
--- | Insert into set
+-- | Insert into the heap.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; elemsSparseHeap set }
 -- [3,5,7,11,13]
 --
 insertSparseHeap :: SparseHeap s -> Int -> ST s ()
-insertSparseHeap set@(SS size dense sparse) x = do
-    checkInvariant set
+insertSparseHeap heap@SH {..} x = do
+    checkInvariant heap
+
     n <- readPrimVar size
     i <- readPrimArray sparse x
     if 0 <= i && i < n
@@ -148,13 +160,13 @@ insertSparseHeap set@(SS size dense sparse) x = do
     else insert n
   where
     {-# INLINE insert #-}
-    insert n = do
+    insert !n = do
         writePrimArray dense n x
         writePrimArray sparse x n
         writePrimVar size (n + 1)
         swim (n + 1) dense sparse n x
 
--- | Delete from set
+-- | Delete element from the heap.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; deleteSparseHeap set 10; elemsSparseHeap set }
 -- []
@@ -175,7 +187,7 @@ insertSparseHeap set@(SS size dense sparse) x = do
 -- [0,2,4,5,3,17,12,9,6,8,20,19,18,15,13,14,11,16,7]
 --
 deleteSparseHeap :: SparseHeap s -> Int -> ST s ()
-deleteSparseHeap heap@(SS size dense sparse) x = do
+deleteSparseHeap heap@SH {..} x = do
     checkInvariant heap
 
     n <- readPrimVar size
@@ -187,7 +199,7 @@ deleteSparseHeap heap@(SS size dense sparse) x = do
     else return ()
   where
     {-# INLINE delete #-}
-    delete i n = do
+    delete !i !n = do
         let !j = n - 1
         writePrimVar size j
 
@@ -274,11 +286,16 @@ swim !_n !dense !sparse !i !x
 -- Just 3
 --
 popSparseHeap :: SparseHeap s -> ST s (Maybe Int)
-popSparseHeap set@(SS size dense sparse) = do
-    checkInvariant set
+popSparseHeap heap = popSparseHeap_ heap (return Nothing) (return . Just)
+
+{-# INLINE popSparseHeap_ #-}
+popSparseHeap_ :: SparseHeap s -> ST s r -> (Int -> ST s r) -> ST s r
+popSparseHeap_ heap@SH {..} no yes = do
+    checkInvariant heap
+
     n <- readPrimVar size
     if n <= 0
-    then return Nothing
+    then no
     else do
         let !j = n - 1
         writePrimVar size j
@@ -288,24 +305,24 @@ popSparseHeap set@(SS size dense sparse) = do
         swap' dense sparse 0 x j y
         sink j dense sparse 0 y
 
-        checkInvariant set
-        return (Just x)
---
+        checkInvariant heap
+        yes x
+
 -- | Clear sparse heap.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; clearSparseHeap set; elemsSparseHeap set }
 -- []
 --
 clearSparseHeap :: SparseHeap s -> ST s ()
-clearSparseHeap (SS size _ _) = do
+clearSparseHeap SH {..} = do
     writePrimVar size 0
 
--- | Elements of the heap
+-- | Elements of the heap.
 --
 -- Returns elements as they are internally stored.
 --
 elemsSparseHeap :: SparseHeap s -> ST s [Int]
-elemsSparseHeap (SS size dense _sparse) = do
+elemsSparseHeap SH {..} = do
     n <- readPrimVar size
     go [] 0 n
   where
@@ -318,13 +335,13 @@ elemsSparseHeap (SS size dense _sparse) = do
         | otherwise
         = return (reverse acc)
 
--- | Drain element from the heap
+-- | Drain element from the heap.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; drainSparseHeap set }
 -- [3,5,7,11,13]
 --
 drainSparseHeap :: SparseHeap s -> ST s [Int]
 drainSparseHeap heap = go id where
-    go acc = popSparseHeap heap >>= \case
-        Nothing -> return (acc [])
-        Just x  -> go (acc . (x :))
+    go acc = popSparseHeap_ heap
+        (return (acc []))
+        (\x -> go (acc . (x :)))
