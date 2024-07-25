@@ -490,7 +490,8 @@ unsat Solver {..} = do
 -------------------------------------------------------------------------------
 
 data Self s = Self
-    { clauseDB :: !(ClauseDB s)
+    { clauses_ :: ![Clause2]
+    , clauseDB :: !(ClauseDB s)
     , pa       :: !(PartialAssignment s)
     , units    :: !(LitSet s)
     , vars     :: !(VarSet s)
@@ -537,8 +538,9 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     let clauseDB = clauses'
 #endif
 
-    let pa = solution
-    let self = Self {..}
+    let clauses_ = clauses'
+    let pa       = solution
+    let self     = Self {..}
 
     solveLoop self End >>= \case
         False -> unsat solver
