@@ -5,6 +5,7 @@
 {-# LANGUAGE MagicHash                  #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+-- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module DPLL (
     Solver,
     newSolver,
@@ -325,60 +326,61 @@ data Satisfied_
     | Unresolved_ !Lit !Lit
   deriving Show
 
-satisfied2_ :: PartialAssignment s -> Clause2 -> ST s Satisfied_
-satisfied2_ !pa !(MkClause2 l1 l2 ls) = go0
+{-# INLINE satisfied2_ #-}
+satisfied2_ :: PartialAssignment s -> Clause2 -> (Satisfied_ -> ST s r) -> ST s r
+satisfied2_ !pa !(MkClause2 l1 l2 ls) kont = go0
   where
     !len = sizeofPrimArray ls
 
     -- initial state
     go0 = lookupPartialAssignment l1 pa >>= \case
         LUndef -> go1
-        LTrue  -> return Satisfied_
+        LTrue  -> kont Satisfied_
         LFalse -> go2
 
     -- l1 -> Undef
     go1 = lookupPartialAssignment l2 pa >>= \case
         LUndef -> goTwo l1 l2 0
-        LTrue  -> return Satisfied_
+        LTrue  -> kont Satisfied_
         LFalse -> goOne l1 0
 
     -- l1 -> False
     go2 = lookupPartialAssignment l2 pa >>= \case
         LUndef -> goOne l2 0
-        LTrue  -> return Satisfied_
+        LTrue  -> kont Satisfied_
         LFalse -> goNone 0
 
     goNone !i
         | i >= len
-        = return Conflicting_
+        = kont Conflicting_
 
         | otherwise
         , let !l = indexPrimArray ls i
         = lookupPartialAssignment l pa >>= \case
             LUndef -> goOne l (i + 1)
-            LTrue  -> return Satisfied_
+            LTrue  -> kont Satisfied_
             LFalse -> goNone (i + 1)
 
     goOne !k1 !i
         | i >= len
-        = return (Unit_ k1)
+        = kont $! Unit_ k1
 
         | otherwise
         , let !l = indexPrimArray ls i
         = lookupPartialAssignment l pa >>= \case
             LUndef -> goTwo k1 l (i + 1)
-            LTrue  -> return Satisfied_
+            LTrue  -> kont Satisfied_
             LFalse -> goOne k1 (i + 1)
 
     goTwo !k1 !k2 !i
         | i >= len
-        = return (Unresolved_ k1 k2)
+        = kont $! Unresolved_ k1 k2
 
         | otherwise
         , let !l = indexPrimArray ls i
         = lookupPartialAssignment l pa >>= \case
             LUndef -> goTwo k1 k2 (i + 1)
-            LTrue  -> return Satisfied_
+            LTrue  -> kont Satisfied_
             LFalse -> goTwo k1 k2 (i + 1)
 
 -------------------------------------------------------------------------------
@@ -464,9 +466,12 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
-    forM_ clauses' $ \c -> satisfied2_ solution c >>= \case
-        Unresolved_ l1 l2 -> insertClauseDB l1 l2 c clauseDB
-        _                 -> error "PANIC! not simplified DB"
+    forM_ clauses' $ \c ->
+        let kontSolve = \case
+                Unresolved_ l1 l2 -> insertClauseDB l1 l2 c clauseDB
+                _                 -> error "PANIC! not simplified DB"
+            {-# INLINE [1] kontSolve #-}
+        in satisfied2_ solution c kontSolve
 #else
     let clauseDB = clauses'
 #endif
@@ -519,50 +524,52 @@ unitPropagate !l !clauseDb !trail !units !pa !vars = do
             solveLoop clauseDb trail units pa vars
 
         | otherwise
-        = readVec watches i >>= \ w@(W l' c) -> satisfied2_ pa c >>= \case
-            Conflicting_      -> do
-                writeVec watches j w
+        = readVec watches i >>= \ w@(W l' c) ->
+            let kontUnitPropagate = \case
+                    Conflicting_      -> do
+                        writeVec watches j w
 
-                let copy !i' !j' =
-                        if i' < size
-                        then do
-                            w' <- readVec watches i'
-                            writeVec watches j' w'
-                            copy (i' + 1) (j' + 1)
+                        let copy !i' !j' =
+                                if i' < size
+                                then do
+                                    w' <- readVec watches i'
+                                    writeVec watches j' w'
+                                    copy (i' + 1) (j' + 1)
 
-                        else shrinkVec watches j'
+                                else shrinkVec watches j'
 
-                copy (i + 1) (j + 1)
+                        copy (i + 1) (j + 1)
 
-                backtrack clauseDb trail units pa vars
-            Satisfied_        -> do
-                writeVec watches j w
-                go watches (i + 1) (j + 1) size
-            Unit_ u           -> do
-                writeVec watches j w
-                insertLitSet u units
-                go watches (i + 1) (j + 1) size
-            Unresolved_ l1 l2
-                | l2 /= l', l2 /= l
-                -> do
-                    insertWatch l2 w clauseDb
-                    go watches (i + 1) j size
+                        backtrack clauseDb trail units pa vars
+                    Satisfied_        -> do
+                        writeVec watches j w
+                        go watches (i + 1) (j + 1) size
+                    Unit_ u           -> do
+                        writeVec watches j w
+                        insertLitSet u units
+                        go watches (i + 1) (j + 1) size
+                    Unresolved_ l1 l2
+                        | l2 /= l', l2 /= l
+                        -> do
+                            insertWatch l2 w clauseDb
+                            go watches (i + 1) j size
 
-                | l1 /= l', l1 /= l
-                -> do
-                    insertWatch l1 w clauseDb
-                    go watches (i + 1) j size
+                        | l1 /= l', l1 /= l
+                        -> do
+                            insertWatch l1 w clauseDb
+                            go watches (i + 1) j size
 
-                | otherwise
-                -> error ("watch" ++ show (l, l1, l2, l'))
-
+                        | otherwise
+                        -> error ("watch" ++ show (l, l1, l2, l'))
+                {-# INLINE [1] kontUnitPropagate #-}
+            in satisfied2_ pa c kontUnitPropagate
 #else
 
 unitPropagate !_ !clauseDb !trail !units !pa !vars = go clauseDb
   where
     go :: [Clause2] -> ST s Bool
     go []     = solveLoop clauseDb trail units pa vars
-    go (c:cs) = satisfied2_ pa c >>= \case
+    go (c:cs) = satisfied2_ pa c $ \case
         Conflicting_    -> backtrack clauseDb trail units pa vars
         Satisfied_      -> go cs
         Unit_ u         -> do
@@ -602,14 +609,17 @@ simplify solver@Solver {..} = whenOk ok $ do
 
 simplifyLoop :: [Clause2] -> PartialAssignment s -> [Clause2] -> VarSet s -> ST s (Maybe [Clause2])
 simplifyLoop !acc !_  []     !_vars = return (Just acc)
-simplifyLoop  acc  pa (c:cs)   vars = satisfied2_ pa c >>= \case
-    Conflicting_    -> return Nothing
-    Satisfied_      -> simplifyLoop acc     pa cs vars
-    Unresolved_ _ _ -> simplifyLoop (c:acc) pa cs vars
-    Unit_ l         -> do
-        insertPartialAssignment l pa
-        deleteVarSet (litToVar l) vars
-        simplifyLoop [] pa (acc ++ cs) vars
+simplifyLoop  acc  pa (c:cs)   vars = satisfied2_ pa c kontSimplify
+  where
+    {-# INLINE [1] kontSimplify #-}
+    kontSimplify = \case
+        Conflicting_    -> return Nothing
+        Satisfied_      -> simplifyLoop acc     pa cs vars
+        Unresolved_ _ _ -> simplifyLoop (c:acc) pa cs vars
+        Unit_ l         -> do
+            insertPartialAssignment l pa
+            deleteVarSet (litToVar l) vars
+            simplifyLoop [] pa (acc ++ cs) vars
 
 -------------------------------------------------------------------------------
 -- queries
