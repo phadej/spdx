@@ -572,16 +572,17 @@ solveLoop self@Self {..} !trail = minViewLitSet units noUnit yesUnit
   where
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
-            LUndef -> do
-                insertPartialAssignment l pa
-                deleteVarSet (litToVar l) vars
-                unitPropagate self l (Deduced l trail)
+        LUndef -> do
+            insertPartialAssignment l pa
+            deleteVarSet (litToVar l) vars
+            unitPropagate self l (Deduced l trail)
 
-            LFalse -> do
-                c <- readLitTable reasons l
-                backtrack self l c trail
+        LFalse -> do
+            c <- readLitTable reasons l
+            -- traceM $ "yes conf " ++ show (l, c, trail)
+            backtrack self c trail
 
-            LTrue  -> solveLoop self trail
+        LTrue  -> solveLoop self trail
 
     noUnit :: ST s Bool
     noUnit = minViewVarSet vars noVar yesVar
@@ -622,18 +623,9 @@ unitPropagate self@Self {..} !l !trail  = do
                     Conflicting_      -> do
                         writeVec watches j w
 
-                        let copy !i' !j' =
-                                if i' < size
-                                then do
-                                    w' <- readVec watches i'
-                                    writeVec watches j' w'
-                                    copy (i' + 1) (j' + 1)
+                        copy watches (i + 1) (j + 1) size
 
-                                else shrinkVec watches j'
-
-                        copy (i + 1) (j + 1)
-
-                        backtrack self l c trail
+                        backtrack self c trail
 
                     Satisfied_        -> do
                         writeVec watches j w
@@ -661,6 +653,16 @@ unitPropagate self@Self {..} !l !trail  = do
 
                 {-# INLINE [1] kontUnitPropagate #-}
             in satisfied2_ pa c kontUnitPropagate
+
+    copy :: Vec s Watch -> Int -> Int -> Int -> ST s ()
+    copy watches i j size = do
+        if i < size
+        then do
+            w' <- readVec watches i
+            writeVec watches j w'
+            copy watches (i + 1) (j + 1) size
+
+        else shrinkVec watches j
 #else
 
 unitPropagate self@Self {..} _l trail = go clauseDB
@@ -668,7 +670,7 @@ unitPropagate self@Self {..} _l trail = go clauseDB
     go :: [Clause2] -> ST s Bool
     go []     = solveLoop self trail
     go (c:cs) = satisfied2_ pa c $ \case
-        Conflicting_    -> backtrack self trail
+        Conflicting_    -> backtrack self c trail
         Satisfied_      -> go cs
         Unit_ u         -> do
             insertLitSet u units
@@ -677,13 +679,14 @@ unitPropagate self@Self {..} _l trail = go clauseDB
         Unresolved_ _ _ -> go cs
 #endif
 
-backtrack :: Self s -> Lit -> Clause2 -> Trail -> ST s Bool
-backtrack self@Self {..} !_l !_c tr = do
-    -- traceM $ "backtrack reason " ++ show (l, c)
+backtrack :: Self s -> Clause2 -> Trail -> ST s Bool
+backtrack self@Self {..} !_cause tr = do
+    -- traceM $ "backtrack reason " ++ show (_cause, tr)
     go tr
   where
     go End               = return False
     go (Deduced l trail) = do
+        _c <- readLitTable reasons l
         deletePartialAssignment l pa
         insertVarSet (litToVar l) vars
         go trail
