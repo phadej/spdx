@@ -56,8 +56,7 @@ import           Data.STRef  (modifySTRef)
 import SparseMaxHeap
 #endif
 
-
--- import Debug.Trace
+import Debug.Trace
 
 -------------------------------------------------------------------------------
 -- Literals
@@ -65,7 +64,12 @@ import SparseMaxHeap
 
 -- | Literals
 newtype Lit = MkLit Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show Lit where
+    showsPrec _d (MkLit l)
+        | testBit l 0 = showChar '-' . shows (lit_to_var l)
+        | otherwise   = shows (lit_to_var l)
 
 deriving newtype instance Prim Lit
 
@@ -336,8 +340,8 @@ satisfied !pa = go0 . nub where
 data Clause2 = MkClause2 {-# UNPACK #-} !Lit {-# UNPACK #-} !Lit {-# UNPACK #-} !(PrimArray Lit)
   deriving Show
 
-_nullClause :: Clause2
-_nullClause = MkClause2 (MkLit 0) (MkLit 0) emptyPrimArray
+nullClause :: Clause2
+nullClause = MkClause2 (MkLit 0) (MkLit 0) emptyPrimArray
 
 data Satisfied_
     = Satisfied_
@@ -491,10 +495,25 @@ unsat Solver {..} = do
 
 data Self s = Self
     { clauses_ :: ![Clause2]
+      -- ^ original clauses
+
     , clauseDB :: !(ClauseDB s)
+      -- ^ clause database actually used for BCP
+
     , pa       :: !(PartialAssignment s)
+      -- ^ current partial assignment
+
     , units    :: !(LitSet s)
+      -- ^ unit literals to be processed
+
     , vars     :: !(VarSet s)
+      -- ^ undecided variables
+
+    , reasons  :: !(LitTable s Clause2)
+      -- ^ reason clauses
+
+    , sandbox  :: !(LitSet s)
+      -- ^ sandbox used to construct conflict clause
     }
 
 data Trail
@@ -510,7 +529,9 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     -- traceM $ "solve " ++ show (length clauses')
 
     litCount <- readSTRef nextLit
-    units <- newLitSet litCount
+    units    <- newLitSet litCount
+    reasons  <- newLitTable litCount nullClause
+    sandbox  <- newLitSet litCount
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
@@ -555,8 +576,12 @@ solveLoop self@Self {..} !trail = minViewLitSet units noUnit yesUnit
                 insertPartialAssignment l pa
                 deleteVarSet (litToVar l) vars
                 unitPropagate self l (Deduced l trail)
+
+            LFalse -> do
+                c <- readLitTable reasons l
+                backtrack self l c trail
+
             LTrue  -> solveLoop self trail
-            LFalse -> backtrack self trail
 
     noUnit :: ST s Bool
     noUnit = minViewVarSet vars noVar yesVar
@@ -570,6 +595,7 @@ solveLoop self@Self {..} !trail = minViewLitSet units noUnit yesUnit
         let !l = varToLit v
 
         insertPartialAssignment l pa
+        writeLitTable reasons l nullClause
         unitPropagate self l (Decided l trail)
 
 unitPropagate :: forall s. Self s -> Lit -> Trail -> ST s Bool
@@ -607,14 +633,18 @@ unitPropagate self@Self {..} !l !trail  = do
 
                         copy (i + 1) (j + 1)
 
-                        backtrack self trail
+                        backtrack self l c trail
+
                     Satisfied_        -> do
                         writeVec watches j w
                         go watches (i + 1) (j + 1) size
+
                     Unit_ u           -> do
                         writeVec watches j w
                         insertLitSet u units
+                        writeLitTable reasons l c
                         go watches (i + 1) (j + 1) size
+
                     Unresolved_ l1 l2
                         | l2 /= l', l2 /= l
                         -> do
@@ -628,6 +658,7 @@ unitPropagate self@Self {..} !l !trail  = do
 
                         | otherwise
                         -> error ("watch" ++ show (l, l1, l2, l'))
+
                 {-# INLINE [1] kontUnitPropagate #-}
             in satisfied2_ pa c kontUnitPropagate
 #else
@@ -641,12 +672,15 @@ unitPropagate self@Self {..} _l trail = go clauseDB
         Satisfied_      -> go cs
         Unit_ u         -> do
             insertLitSet u units
+            writeLitTable reasons l c
             go cs
         Unresolved_ _ _ -> go cs
 #endif
 
-backtrack :: Self s -> Trail -> ST s Bool
-backtrack self@Self {..} = go
+backtrack :: Self s -> Lit -> Clause2 -> Trail -> ST s Bool
+backtrack self@Self {..} !_l !_c tr = do
+    -- traceM $ "backtrack reason " ++ show (l, c)
+    go tr
   where
     go End               = return False
     go (Deduced l trail) = do
@@ -657,6 +691,8 @@ backtrack self@Self {..} = go
         deletePartialAssignment l pa
         insertPartialAssignment (neg l) pa
         clearLitSet units
+        let conflictCause = nullClause -- TODO
+        writeLitTable reasons (neg l) conflictCause
         unitPropagate self (neg l) (Deduced (neg l) trail)
 
 -------------------------------------------------------------------------------
