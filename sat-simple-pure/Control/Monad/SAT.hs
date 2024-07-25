@@ -16,6 +16,7 @@ module Control.Monad.SAT (
     -- * Literals
     Lit,
     newLit,
+    boostScore,
     -- ** Negation
     Neg (..),
     -- * Clauses
@@ -152,6 +153,10 @@ newLit :: SAT s (Lit s)
 newLit = SAT $ \s _t _r -> do
     l <- liftST (DPLL.newLit s)
     return (L l)
+
+-- | Boost score of the literal
+boostScore :: Lit s -> SAT s ()
+boostScore (L l) = SAT $ \s _t _r -> liftST (DPLL.boostScore s l)
 
 -------------------------------------------------------------------------------
 -- Prop

@@ -12,6 +12,7 @@ module DPLL (
     newSolver,
     Lit (..),
     newLit,
+    boostScore,
     neg,
     addClause,
     solve,
@@ -41,8 +42,9 @@ import SparseSet
 import UnliftedSTRef
 
 #ifdef TWO_WATCHED_LITERALS
-import Control.Monad        (forM_)
-import Data.Primitive.Array (MutableArray, newArray, readArray, sizeofMutableArray, writeArray)
+import Control.Monad            (forM_)
+import Data.Primitive.Array     (MutableArray, newArray, readArray, sizeofMutableArray, writeArray)
+import Data.Primitive.PrimArray (traversePrimArray_)
 import Vec
 #endif
 
@@ -429,12 +431,22 @@ newLit Solver {..} = do
     vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
     writeSTRef variables vars'
 
-    weightVarSet (litToVar l) (\_ -> - l') vars'
-    -- w <- nextLCG lcg
-    -- weightVarSet (litToVar l) (\_ -> fromIntegral w) vars'
     insertVarSet (litToVar l) vars'
 
     return l
+
+boost :: Int -> Int
+boost n
+    | n <= 0    = 1
+    | otherwise = n + 1
+
+_decay :: Int -> Int
+_decay n = unsafeShiftR n 1
+
+boostScore :: Solver s -> Lit -> ST s ()
+boostScore Solver {..} l = do
+    vars <- readSTRef variables
+    weightVarSet (litToVar l) (boost . boost . boost) vars
 
 addClause :: Solver s -> [Lit] -> ST s Bool
 addClause solver@Solver {..} clause = do
@@ -480,9 +492,23 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
-    forM_ clauses' $ \c ->
+    forM_ clauses' $ \c@(MkClause2 a b d) ->
         let kontSolve = \case
-                Unresolved_ l1 l2 -> insertClauseDB l1 l2 c clauseDB
+                Unresolved_ l1 l2 -> do
+                    if sizeofPrimArray d == 0
+                    then do
+                        weightVarSet (litToVar a) (boost . boost . boost) vars
+                        weightVarSet (litToVar b) (boost . boost . boost) vars
+                    else if sizeofPrimArray d <= 2 then do
+                        weightVarSet (litToVar a) (boost . boost) vars
+                        weightVarSet (litToVar b) (boost . boost) vars
+                        traversePrimArray_ (\l -> weightVarSet (litToVar l) (boost . boost) vars) d
+                    else do
+                        weightVarSet (litToVar a) boost vars
+                        weightVarSet (litToVar b) boost vars
+                        traversePrimArray_ (\l -> weightVarSet (litToVar l) boost vars) d
+
+                    insertClauseDB l1 l2 c clauseDB
                 _                 -> error "PANIC! not simplified DB"
             {-# INLINE [1] kontSolve #-}
         in satisfied2_ solution c kontSolve
@@ -516,6 +542,7 @@ solveLoop !clauseDb !trail !units !pa !vars = minViewLitSet units noUnit yesUnit
     yesVar !v = do
         -- traceM $ "decide" ++ show v
         let !l = varToLit v
+
         insertPartialAssignment l pa
         unitPropagate l clauseDb (Decided l trail) units pa vars
 
