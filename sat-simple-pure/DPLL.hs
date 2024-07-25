@@ -44,7 +44,7 @@ import UnliftedSTRef
 
 #ifdef TWO_WATCHED_LITERALS
 import Control.Monad            (forM_)
-import Data.Primitive.Array     (MutableArray, newArray, readArray, sizeofMutableArray, writeArray)
+import Data.Primitive.Array     (MutableArray, newArray, readArray, writeArray)
 import Data.Primitive.PrimArray (traversePrimArray_)
 import Vec
 #endif
@@ -242,23 +242,36 @@ type Clauses = [Clause2]
 -- LitTable
 -------------------------------------------------------------------------------
 
+newtype LitTable s a = LitT (MutableArray s a)
+
+newLitTable :: Int -> a -> ST s (LitTable s a)
+newLitTable !size x = do
+    xs <- newArray size x
+    return (LitT xs)
+
+readLitTable :: LitTable s a -> Lit -> ST s a
+readLitTable (LitT xs) (MkLit l) = readArray xs l
+
+writeLitTable :: LitTable s a -> Lit -> a -> ST s ()
+writeLitTable (LitT xs) (MkLit l) x = writeArray xs l x
+
 -------------------------------------------------------------------------------
 -- ClauseDB
 -------------------------------------------------------------------------------
 
 #ifdef TWO_WATCHED_LITERALS
 
-newtype ClauseDB s = CDB (MutableArray s (Vec s Watch))
+newtype ClauseDB s = CDB (LitTable s (Vec s Watch))
 
 data Watch = W !Lit !Clause2
 
 newClauseDB :: Int -> ST s (ClauseDB s)
 newClauseDB !size = do
-    arr <- newArray size undefined
+    arr <- newLitTable size undefined
 
     forM_ [0 .. size - 1] $ \i -> do
         vec <- newVec 16
-        writeArray arr i vec
+        writeLitTable arr (MkLit i) vec
 
     return (CDB arr)
 
@@ -268,27 +281,14 @@ insertClauseDB !l1 !l2 !clause !cdb = do
     insertWatch l2 (W l1 clause) cdb
 
 insertWatch :: Lit -> Watch -> ClauseDB s -> ST s ()
-insertWatch (MkLit l) !w (CDB cdb) = do
-    ws  <- readArray cdb l
+insertWatch !l !w (CDB cdb) = do
+    ws  <- readLitTable cdb l
     ws' <- insertVec ws w
-    writeArray cdb l ws'
+    writeLitTable cdb l ws'
 
 lookupClauseDB :: Lit -> ClauseDB s -> ST s (Vec s Watch)
-lookupClauseDB (MkLit l) (CDB arr) = do
-    readArray arr l
-
-_sizeofClauseDB :: ClauseDB s -> ST s Int
-_sizeofClauseDB (CDB arr) = go 0 0 (sizeofMutableArray arr)
-  where
-    go !acc !i !size
-        | i < size
-        = do
-            vec <- readArray arr i
-            elm <- sizeofVec vec
-            go (acc + elm) (i + 1) size
-
-        | otherwise
-        = return acc
+lookupClauseDB !l (CDB arr) = do
+    readLitTable arr l
 
 #else
 
