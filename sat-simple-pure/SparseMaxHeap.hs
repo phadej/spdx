@@ -3,7 +3,7 @@
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RecordWildCards #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
-module SparseHeap (
+module SparseMaxHeap (
     SparseHeap,
     sizeofSparseHeap,
     newSparseHeap,
@@ -16,6 +16,7 @@ module SparseHeap (
     clearSparseHeap,
     extendSparseHeap,
     drainSparseHeap,
+    modifyWeightSparseHeap,
 ) where
 
 import Control.Monad            (unless, when)
@@ -26,13 +27,13 @@ import Data.Primitive.PrimVar
 
 -- import Debug.Trace
 
+-- #define CHECK_INVARIANTS
+
 -- $setup
 -- >>> import Control.Monad.ST (runST)
 
--- #define CHECK_INVARIANTS
-
 -- | Like sparse set https://research.swtch.com/sparse,
--- but also a min heap https://en.wikipedia.org/wiki/Heap_(data_structure)
+-- but also a max heap https://en.wikipedia.org/wiki/Heap_(data_structure)
 --
 -- i.e. pop returns minimum element.
 --
@@ -40,7 +41,17 @@ data SparseHeap s = SH
     { size   :: {-# UNPACK #-} !(PrimVar s Int)
     , dense  :: {-# UNPACK #-} !(MutablePrimArray s Int)
     , sparse :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    , weight :: {-# UNPACK #-} !(MutablePrimArray s Int)
     }
+
+le :: Int -> Int -> Int -> Int -> Bool
+le _ !u _y !v = u >= v
+{-
+le !x !u !y !v = u >= v
+    | u > v          = True
+    | u == v, x <= y = True
+    | otherwise      = False
+-}
 
 checking :: String -> SparseHeap s -> ST s a -> ST s a
 {-# INLINE checking #-}
@@ -54,6 +65,7 @@ checking tag heap m = do
     x <- m
     _invariant (tag ++ " post") heap
     return x
+
 #else
 
 #define CHECK(tag,heap)
@@ -66,15 +78,16 @@ _invariant :: String -> SparseHeap s -> ST s ()
 _invariant tag SH {..} = do
     n         <- readPrimVar size
     capacity  <- getSizeofMutablePrimArray dense
-    capacity' <- getSizeofMutablePrimArray sparse
+    capacity1 <- getSizeofMutablePrimArray sparse
+    capacity2 <- getSizeofMutablePrimArray weight
 
-    unless (n <= capacity && capacity == capacity') $
-        error $ "capacities " ++ show (n, capacity, capacity')
+    unless (n <= capacity && capacity == capacity1 && capacity == capacity2) $
+        error $ "capacities " ++ show (n, capacity, capacity1, capacity2)
 
-    go capacity n 0
-    heaps n 0
+    checkStructure capacity n 0
+    checkHeaps n 0
   where
-    go capacity n i =
+    checkStructure capacity n i =
         if i >= n
         then return ()
         else do
@@ -82,27 +95,30 @@ _invariant tag SH {..} = do
             unless (x < capacity) $ error $ "x < capacity" ++ show (x, capacity)
             j <- readPrimArray sparse x
             unless (i == j) $ error $ "i == j" ++ show (i, j)
-            go capacity n (i + 1)
+            checkStructure capacity n (i + 1)
 
-    heaps n i =
+    checkHeaps n i =
         if i >= n
         then return ()
         else do
             x <- readPrimArray dense i
-            heap n i x
-            heaps n (i + 1)
+            u <- readPrimArray weight x
+            heap n i x u
+            checkHeaps n (i + 1)
 
-    heap n i x = do
+    heap n i x u = do
         let !j = 2 * i + 1
         let !k = 2 * i + 2
 
         when (j < n) $ do
             y <- readPrimArray dense j
-            unless (x <= y) $ error $ tag ++ " heap 1 " ++ show (x, y)
+            v <- readPrimArray weight y
+            unless (le x u y v) $ error $ "heap 1 " ++ tag ++ " " ++ show (n, i, x, u, j, y, v)
 
         when (k < n) $ do
             z <- readPrimArray dense k
-            unless (x <= z) $ error $ tag ++ " heap 2 " ++ show (x, z)
+            w <- readPrimArray weight z
+            unless (le x u z w) $ error $ "heap 2 " ++ tag ++ " " ++ show (n, i, x, u, k, z, w)
 
 -- | Create new sparse heap.
 --
@@ -117,6 +133,9 @@ newSparseHeap !capacity' = do
     size <- newPrimVar 0
     dense <- newPrimArray capacity
     sparse <- newPrimArray capacity
+    weight <- newPrimArray capacity
+    setPrimArray weight 0 capacity 0
+
     return SH {..}
 
 -- | Size of sparse heap.
@@ -139,8 +158,10 @@ extendSparseHeap capacity1 SH {..} = do
 
     dense' <- resizeMutablePrimArray dense capacity
     sparse' <- resizeMutablePrimArray sparse capacity
+    weight' <- resizeMutablePrimArray weight capacity
+    setPrimArray weight' capacity2 (capacity - capacity2) 0
 
-    return SH { size, dense = dense', sparse = sparse' }
+    return SH { size, dense = dense', sparse = sparse', weight = weight' }
 
 -- | Test for membership.
 --
@@ -180,26 +201,29 @@ insertSparseHeap heap@SH {..} x = checking "insert" heap $ do
         writePrimArray dense n x
         writePrimArray sparse x n
         writePrimVar size (n + 1)
-        swim (n + 1) dense sparse n x
+        u <- readPrimArray weight x
+        swim (n + 1) dense sparse weight n x u
 
 -- | Delete element from the heap.
 --
 -- >>> runST $ do { set <- newSparseHeap 100; deleteSparseHeap set 10; elemsSparseHeap set }
 -- []
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; deleteSparseHeap set 10; elemsSparseHeap set }
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+--
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 10; elemsSparseHeap set }
 -- [3,5,7,11,13]
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; deleteSparseHeap set 13; elemsSparseHeap set }
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 13; elemsSparseHeap set }
 -- [3,5,7,11]
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; deleteSparseHeap set 11; elemsSparseHeap set }
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 11; elemsSparseHeap set }
 -- [3,5,7,13]
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; deleteSparseHeap set 3; elemsSparseHeap set }
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 3; elemsSparseHeap set }
 -- [5,11,7,13]
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) $ [0,2..20] ++ [19,17..3]; deleteSparseHeap set 10; elemsSparseHeap set }
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) $ [0,2..20] ++ [19,17..3]; deleteSparseHeap set 10; elemsSparseHeap set }
 -- [0,2,4,5,3,17,12,9,6,8,20,19,18,15,13,14,11,16,7]
 --
 deleteSparseHeap :: SparseHeap s -> Int -> ST s ()
@@ -237,51 +261,57 @@ deleteSparseHeap heap@SH {..} x = checking "delete" heap $ do
             writePrimVar size j
 
             y <- readPrimArray dense j
+            v <- readPrimArray weight y
             swap' dense sparse 0 x j y
-            sink j dense sparse 0 y
+            sink j dense sparse weight 0 y v
+
 
 {-# INLINE swap' #-}
 swap' :: MutablePrimArray s Int -> MutablePrimArray s Int -> Int -> Int -> Int -> Int -> ST s ()
-swap' !dense !sparse !i !x !j !y = do
-        writePrimArray dense j x
-        writePrimArray dense i y
-        writePrimArray sparse x j
-        writePrimArray sparse y i
+swap' !dense !sparse !i !x !j !y  = do
+    writePrimArray dense j x
+    writePrimArray dense i y
+    writePrimArray sparse x j
+    writePrimArray sparse y i
 
 -- sift down
-sink :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> Int -> Int -> ST s ()
-sink !n !dense !sparse !i !x
+sink :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Int  -> Int -> Int -> Int -> ST s ()
+sink !n !dense !sparse !weight !i !x !u
     | k < n
     = do
         l <- readPrimArray dense j
         r <- readPrimArray dense k
-        -- traceM $ "sink " ++ show (i, j, k, x, l, r)
+        v <- readPrimArray weight l
+        w <- readPrimArray weight r
 
-        if x <= l
+        -- traceM $ "sink" ++ show ((i, x, u), (j, l, v), (k, r, w))
+
+        if le x u l v -- x <= l
         then do
-            if x <= r
+            if le x u r w -- x <= r
             then return ()
             else do
                  -- r < x <= l; swap x and r
                 swap' dense sparse i x k r
-                sink n dense sparse k x
+                sink n dense sparse weight k x u
 
         else do
-            if l <= r
+            if le l v r w -- l <= r
             then do
                 -- l < x, l <= r; swap x and l
                 swap' dense sparse i x j l
-                sink n dense sparse j x
+                sink n dense sparse weight j x u
 
             else do
                 -- r < l <= x; swap x and r
                 swap' dense sparse i x k r
-                sink n dense sparse k x
+                sink n dense sparse weight k x u
 
     | j < n
     = do
         l <- readPrimArray dense j
-        if x <= l
+        v <- readPrimArray weight l
+        if le x u l v -- x <= l
         then return ()
         else do
             swap' dense sparse i x j l
@@ -294,8 +324,8 @@ sink !n !dense !sparse !i !x
     !k = j + 1
 
 -- sift up
-swim :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> Int -> Int -> ST s ()
-swim !_n !dense !sparse !i !x
+swim :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Int  -> Int -> Int -> Int -> ST s ()
+swim !_n !dense !sparse !weight !i !x !u
     | i <= 0
     = return ()
 
@@ -304,16 +334,63 @@ swim !_n !dense !sparse !i !x
         -- j = floor (i - 1 / 2)
         let !j = unsafeShiftR (i - 1) 1
         y <- readPrimArray dense j
+        v <- readPrimArray weight y
 
-        unless (y <= x) $ do
+        unless (le y v x u) $ do
             swap' dense sparse i x j y
-            swim _n dense sparse j x
+            swim _n dense sparse weight j x u
+
+-- | Modify weight of the element.
+--
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+-- >>> let populate heap = mapM_ (insert heap) [5,3,7,11,13,11]
+-- >>> let populate' heap = mapM_ (insertSparseHeap heap) [5,3,7,11,13,11]
+--
+-- >>> runST $ do { heap <- newSparseHeap 100; populate heap; popSparseHeap heap }
+-- Just 3
+--
+-- >>> runST $ do { heap <- newSparseHeap 100; populate heap; modifyWeightSparseHeap heap 3 (\_ -> - 100); popSparseHeap heap }
+-- Just 5
+--
+-- Weight are preserved even if element is not in the heap at the moment
+--
+-- >>> runST $ do { heap <- newSparseHeap 100; modifyWeightSparseHeap heap 7 (\_ -> 100); populate' heap; popSparseHeap heap }
+-- Just 7
+--
+modifyWeightSparseHeap :: forall s. SparseHeap s -> Int -> (Int -> Int) -> ST s ()
+modifyWeightSparseHeap heap@SH {..} x f = checking "modify" heap $ do
+    u' <- readPrimArray weight x
+    let u = f u'
+    writePrimArray weight x u
+
+    if u == u'
+    then return ()
+    else do
+        n <- readPrimVar size
+        i <- readPrimArray sparse x
+        if 0 <= i && i < n
+        then do
+            x' <- readPrimArray dense i
+            if x == x' then balance n i u u' else return ()
+        else return ()
+  where
+    balance :: Int -> Int -> Int -> Int -> ST s ()
+    balance n i u u'
+        | u >= u'
+        = swim n dense sparse weight i x u
+
+        | otherwise
+        = sink n dense sparse weight i x u
 
 -- | Pop element from the heap.
 --
--- >>> runST $ do { heap <- newSparseHeap 100; mapM_ (insertSparseHeap heap) [5,3,7,11,13,11]; popSparseHeap heap }
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+--
+-- >>> runST $ do { heap <- newSparseHeap 100; mapM_ (insert heap) [5,3,7,11,13,11]; popSparseHeap heap }
 -- Just 3
 --
+-- >>> runST $ do { heap <- newSparseHeap 500; mapM_ (insert heap) [1..400]; drainSparseHeap heap }
+-- [1,2...,400]
 popSparseHeap :: SparseHeap s -> ST s (Maybe Int)
 popSparseHeap heap = popSparseHeap_ heap (return Nothing) (return . Just)
 
@@ -323,6 +400,10 @@ popSparseHeap_ _heap@SH {..} no yes = do
     CHECK("pop pre", _heap)
 
     n <- readPrimVar size
+
+    -- xs <- freezePrimArray dense 0 n
+    -- traceM $ "pop" ++ show (take 15 $ primArrayToList xs)
+
     if n <= 0
     then no
     else do
@@ -331,8 +412,9 @@ popSparseHeap_ _heap@SH {..} no yes = do
 
         x <- readPrimArray dense 0
         y <- readPrimArray dense j
+        v <- readPrimArray weight y
         swap' dense sparse 0 x j y
-        sink j dense sparse 0 y
+        sink j dense sparse weight 0 y v
 
         CHECK("pop post", _heap)
         yes x
@@ -366,7 +448,9 @@ elemsSparseHeap SH {..} = do
 
 -- | Drain element from the heap.
 --
--- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insertSparseHeap set) [3,5,7,11,13,11]; drainSparseHeap set }
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+--
+-- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; drainSparseHeap set }
 -- [3,5,7,11,13]
 --
 drainSparseHeap :: SparseHeap s -> ST s [Int]
