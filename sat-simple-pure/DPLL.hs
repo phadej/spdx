@@ -33,14 +33,12 @@ import Data.STRef           (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word            (Word8)
 
 import Data.Primitive.ByteArray
-       (MutableByteArray (..), MutableByteArray#, getSizeofMutableByteArray, newByteArray, readByteArray,
-       resizeMutableByteArray, shrinkMutableByteArray, writeByteArray)
+       (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
+       shrinkMutableByteArray, writeByteArray)
 import Data.Primitive.PrimArray (PrimArray, emptyPrimArray, indexPrimArray, primArrayFromList, sizeofPrimArray)
 
 import LCG
-import Lifted
 import SparseSet
-import UnliftedSTRef
 
 #ifdef TWO_WATCHED_LITERALS
 import Control.Monad            (forM_)
@@ -110,32 +108,24 @@ data LBool = LFalse | LTrue | LUndef
 -- Partial Assignment
 -------------------------------------------------------------------------------
 
-newtype PartialAssignment s = PA (USTRef s (MutableByteArray# s))
+newtype PartialAssignment s = PA (MutableByteArray s)
 
 newPartialAssignment :: ST s (PartialAssignment s)
 newPartialAssignment = do
-    arr@(MutableByteArray arr#) <- newByteArray 4096
+    arr <- newByteArray 4096
     shrinkMutableByteArray arr 0
-    ref <- newUSTRef arr#
-    return (PA ref)
+    return (PA arr)
 
-clearPartialAssignment :: PartialAssignment s -> ST s ()
-clearPartialAssignment (PA ref) = do
-    Lift arr <- readUSTRef ref
-    shrinkMutableByteArray (MutableByteArray arr) 0
-
-extendPartialAssignment :: PartialAssignment s -> ST s ()
-extendPartialAssignment (PA ref) = do
-    Lift arr <- readUSTRef ref
-    size <- getSizeofMutableByteArray (MutableByteArray arr)
-    arr'@(MutableByteArray arr#) <- resizeMutableByteArray (MutableByteArray arr) (size + 1)
+extendPartialAssignment :: PartialAssignment s -> ST s (PartialAssignment s)
+extendPartialAssignment (PA arr) = do
+    size <- getSizeofMutableByteArray arr
+    arr' <- resizeMutableByteArray arr (size + 1)
     writeByteArray arr' size (0xff :: Word8)
-    writeUSTRef ref arr#
+    return (PA arr')
 
 lookupPartialAssignment :: Lit -> PartialAssignment s -> ST s LBool
-lookupPartialAssignment (MkLit l) (PA ref) = do
-    Lift arr <- readUSTRef ref
-    readByteArray @Word8 (MutableByteArray arr) (lit_to_var l) >>= \case
+lookupPartialAssignment (MkLit l) (PA arr) = do
+    readByteArray @Word8 arr (lit_to_var l) >>= \case
         0x0 -> return (if y then LFalse else LTrue)
         0x1 -> return (if y then LTrue else LFalse)
         _   -> return LUndef
@@ -144,14 +134,12 @@ lookupPartialAssignment (MkLit l) (PA ref) = do
     {-# INLINE y #-}
 
 insertPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
-insertPartialAssignment (MkLit l) (PA ref) = do
-    Lift arr <- readUSTRef ref
-    writeByteArray (MutableByteArray arr) (lit_to_var l) (if testBit l 0 then 0x1 else 0x0 :: Word8)
+insertPartialAssignment (MkLit l) (PA arr) = do
+    writeByteArray arr (lit_to_var l) (if testBit l 0 then 0x1 else 0x0 :: Word8)
 
 deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
-deletePartialAssignment (MkLit l) (PA ref) = do
-    Lift arr <- readUSTRef ref
-    writeByteArray (MutableByteArray arr) (lit_to_var l) (0xff :: Word8)
+deletePartialAssignment (MkLit l) (PA arr) = do
+    writeByteArray arr (lit_to_var l) (0xff :: Word8)
 
 -------------------------------------------------------------------------------
 -- VarSet
@@ -415,7 +403,7 @@ satisfied2_ !pa !(MkClause2 l1 l2 ls) kont = go0
 data Solver s = Solver
     { ok        :: !(STRef s Bool)
     , nextLit   :: !(STRef s Int)
-    , solution  :: !(PartialAssignment s)
+    , solution  :: !(STRef s (PartialAssignment s))
     , variables :: !(STRef s (VarSet s))
     , clauses   :: !(STRef s Clauses)
     , lcg       :: !(LCG s)
@@ -426,7 +414,7 @@ newSolver :: ST s (Solver s)
 newSolver = do
     ok        <- newSTRef True
     nextLit   <- newSTRef 0
-    solution  <- newPartialAssignment
+    solution  <- newPartialAssignment >>= newSTRef
     variables <- newVarSet >>= newSTRef
     clauses   <- newSTRef []
     lcg       <- newLCG 44
@@ -435,7 +423,10 @@ newSolver = do
 -- | Create fresh literal
 newLit :: Solver s -> ST s Lit
 newLit Solver {..} = do
-    extendPartialAssignment solution
+    pa <- readSTRef solution
+    pa' <- extendPartialAssignment pa
+    writeSTRef solution pa'
+
     l' <- readSTRef nextLit
     writeSTRef nextLit (l' + 2)
     let l = MkLit l'
@@ -467,7 +458,8 @@ addClause solver@Solver {..} clause = do
     ok' <- readSTRef ok
     if ok'
     then do
-        s <- satisfied solution clause
+        pa <- readSTRef solution
+        s <- satisfied pa clause
         case s of
             Satisfied    -> return True
             Conflicting  -> unsat solver
@@ -476,7 +468,7 @@ addClause solver@Solver {..} clause = do
                 writeSTRef clauses (c : clauses')
                 return True
             Unit l -> do
-                insertPartialAssignment l solution
+                insertPartialAssignment l pa
                 readSTRef variables >>= deleteVarSet (litToVar l)
                 return True
     else return False
@@ -484,7 +476,6 @@ addClause solver@Solver {..} clause = do
 unsat :: Solver s -> ST s Bool
 unsat Solver {..} = do
     writeSTRef ok False
-    clearPartialAssignment solution
     writeSTRef clauses []
     readSTRef variables >>= clearVarSet
     return False
@@ -532,6 +523,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     units    <- newLitSet litCount
     reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
+    pa       <- readSTRef solution
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
@@ -554,13 +546,12 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
                     insertClauseDB l1 l2 c clauseDB
                 _                 -> error "PANIC! not simplified DB"
             {-# INLINE [1] kontSolve #-}
-        in satisfied2_ solution c kontSolve
+        in satisfied2_ pa c kontSolve
 #else
     let clauseDB = clauses'
 #endif
 
     let clauses_ = clauses'
-    let pa       = solution
     let self     = Self {..}
 
     solveLoop self End >>= \case
@@ -707,8 +698,9 @@ simplify :: Solver s -> ST s Bool
 simplify solver@Solver {..} = whenOk ok $ do
     clauses0 <- readSTRef clauses
     vars     <- readSTRef variables
+    pa       <- readSTRef solution
 
-    simplifyLoop [] solution clauses0 vars >>= \case
+    simplifyLoop [] pa clauses0 vars >>= \case
         Nothing -> unsat solver
         Just clauses1 -> do
             writeSTRef clauses clauses1
@@ -736,7 +728,8 @@ simplifyLoop  acc  pa (c:cs)   vars = satisfied2_ pa c kontSimplify
 -- | Lookup model value
 modelValue :: Solver s -> Lit -> ST s Bool
 modelValue Solver {..} l = do
-    lookupPartialAssignment l solution <&> \case
+    pa <- readSTRef solution
+    lookupPartialAssignment l pa <&> \case
         LUndef -> False
         LTrue  -> True
         LFalse -> False
