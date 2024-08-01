@@ -20,6 +20,9 @@ module DPLL (
     modelValue,
 ) where
 
+-- #define ENABLE_ASSERTS
+-- #define ENABLE_TRACE
+
 #define TWO_WATCHED_LITERALS
 -- #define INTSET_VARS
 
@@ -35,15 +38,23 @@ import Data.Word            (Word8)
 import Data.Primitive.ByteArray
        (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
        shrinkMutableByteArray, writeByteArray)
-import Data.Primitive.PrimArray (PrimArray, emptyPrimArray, indexPrimArray, primArrayFromList, sizeofPrimArray)
+import Data.Primitive.PrimArray
+       (PrimArray, emptyPrimArray, foldrPrimArray, freezePrimArray, indexPrimArray, primArrayFromList, readPrimArray,
+       sizeofPrimArray)
+import Data.Primitive.PrimVar   (readPrimVar)
+
+#ifdef ENABLE_ASSERTS
+import Assert
+#endif
 
 import LCG
 import SparseSet
 
-#ifdef TWO_WATCHED_LITERALS
 import Control.Monad            (forM_)
 import Data.Primitive.Array     (MutableArray, newArray, readArray, writeArray)
 import Data.Primitive.PrimArray (traversePrimArray_)
+
+#ifdef TWO_WATCHED_LITERALS
 import Vec
 #endif
 
@@ -54,7 +65,25 @@ import           Data.STRef  (modifySTRef)
 import SparseMaxHeap
 #endif
 
+import Unsafe.Coerce (unsafeCoerce)
+
 import Debug.Trace
+import GHC.Stack
+
+coercePrimArrayLit :: PrimArray Int -> PrimArray Lit
+coercePrimArrayLit = unsafeCoerce
+
+#ifdef ENABLE_TRACE
+#define TRACING(x) x
+#else
+#define TRACING(x)
+#endif
+
+#ifdef ENABLE_ASSERTS
+#define ASSERTING(x) x
+#else
+#define ASSERTING(x)
+#endif
 
 -------------------------------------------------------------------------------
 -- Literals
@@ -65,8 +94,8 @@ newtype Lit = MkLit Int
   deriving (Eq, Ord)
 
 instance Show Lit where
-    showsPrec _d (MkLit l)
-        | testBit l 0 = showChar '-' . shows (lit_to_var l)
+    showsPrec d (MkLit l)
+        | testBit l 0 = showParen (d > 10) $ showChar '-' . shows (lit_to_var l)
         | otherwise   = shows (lit_to_var l)
 
 deriving newtype instance Prim Lit
@@ -105,6 +134,12 @@ data LBool = LFalse | LTrue | LUndef
   deriving (Eq, Ord, Show)
 
 -------------------------------------------------------------------------------
+-- Stats
+-------------------------------------------------------------------------------
+
+data Stats s = MkStats (PrimArray Int)
+
+-------------------------------------------------------------------------------
 -- Partial Assignment
 -------------------------------------------------------------------------------
 
@@ -140,6 +175,31 @@ insertPartialAssignment (MkLit l) (PA arr) = do
 deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
 deletePartialAssignment (MkLit l) (PA arr) = do
     writeByteArray arr (lit_to_var l) (0xff :: Word8)
+
+tracePartialAssignment :: PartialAssignment s -> ST s ()
+tracePartialAssignment (PA arr) = do
+    n <- getSizeofMutableByteArray arr
+    lits <- go n [] 0
+    traceM $ "PartialAssignment " ++ show lits
+  where
+    go n acc i
+        | i < n
+        , let l = MkLit (var_to_lit i)
+        = readByteArray @Word8 arr i >>= \case
+          0x0 -> go n (neg l : acc) (i + 1)
+          0x1 -> go n (    l : acc) (i + 1)
+          _   -> go n          acc  (i + 1)
+
+        | otherwise
+        = return (reverse acc)
+
+#ifdef ENABLE_ASSERTS
+assertLiteralInPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
+assertLiteralInPartialAssignment l pa =
+    lookupPartialAssignment l pa >>= \case
+        LTrue -> return ()
+        x     -> assertST ("lit in partial: " ++ show x) False
+#endif
 
 -------------------------------------------------------------------------------
 -- VarSet
@@ -217,12 +277,40 @@ newLitSet n = LS <$> newSparseSet n
 insertLitSet :: Lit -> LitSet s -> ST s ()
 insertLitSet (MkLit l) (LS ls) = insertSparseSet ls l
 
+deleteLitSet :: Lit -> LitSet s -> ST s ()
+deleteLitSet (MkLit l) (LS ls) = deleteSparseSet ls l
+
 {-# INLINE minViewLitSet #-}
 minViewLitSet :: LitSet s -> ST s r -> (Lit -> ST s r) -> ST s r
 minViewLitSet (LS xs) no yes = popSparseSet_ xs no (coerce yes)
 
 clearLitSet :: LitSet s -> ST s ()
 clearLitSet (LS xs) = clearSparseSet xs
+
+elemsLitSet :: LitSet s -> ST s [Lit]
+elemsLitSet (LS s) = coerce (elemsSparseSet s)
+
+memberLitSet :: LitSet s -> Lit -> ST s Bool
+memberLitSet (LS xs) (MkLit x) = memberSparseSet xs x
+
+sizeofLitSet :: LitSet s -> ST s Int
+sizeofLitSet (LS xs) = sizeofSparseSet xs
+
+litSetToClause :: LitSet s -> ST s Clause2
+litSetToClause (LS SS {..}) = do
+    n <- readPrimVar size
+    ASSERTING(assertST "size >= 2" (n >= 2))
+    l1 <- readPrimArray dense 0
+    l2 <- readPrimArray dense 1
+    ls <- freezePrimArray dense 2 (n - 2)
+    return $! MkClause2 (coerce l1) (coerce l2) (coercePrimArrayLit ls)
+
+unsingletonLitSet :: LitSet s -> ST s Lit
+unsingletonLitSet (LS SS {..}) = do
+    ASSERTING(n <- readPrimVar size)
+    ASSERTING(assertST "size == 1" (n == 1))
+    x <- readPrimArray dense 0
+    return (MkLit x)
 
 -------------------------------------------------------------------------------
 -- Clauses
@@ -282,6 +370,11 @@ lookupClauseDB :: Lit -> ClauseDB s -> ST s (Vec s Watch)
 lookupClauseDB !l (CDB arr) = do
     readLitTable arr l
 
+clearClauseDB :: ClauseDB s -> Lit -> ST s ()
+clearClauseDB (CDB cdb) l = do
+    v <- newVec 0
+    writeLitTable cdb l v
+
 #else
 
 type ClauseDB s = [Clause2]
@@ -328,8 +421,19 @@ satisfied !pa = go0 . nub where
 data Clause2 = MkClause2 {-# UNPACK #-} !Lit {-# UNPACK #-} !Lit {-# UNPACK #-} !(PrimArray Lit)
   deriving Show
 
+litInClause :: Lit -> Clause2 -> Bool
+litInClause l (MkClause2 l1 l2 ls) =
+    l == l1 || l == l2 || foldrPrimArray (\l' next -> l' == l || next) False ls
+
+forLitInClause2_ :: Applicative f => Clause2 -> (Lit -> f b) -> f ()
+forLitInClause2_ (MkClause2 l1 l2 ls) f =
+    f l1 *> f l2 *> traversePrimArray_ f ls
+
 nullClause :: Clause2
-nullClause = MkClause2 (MkLit 0) (MkLit 0) emptyPrimArray
+nullClause = MkClause2 (MkLit 1) (MkLit 1) emptyPrimArray
+
+nullClause3 :: Clause2
+nullClause3 = MkClause2 (MkLit 2) (MkLit 2) emptyPrimArray
 
 data Satisfied_
     = Satisfied_
@@ -394,6 +498,26 @@ satisfied2_ !pa !(MkClause2 l1 l2 ls) kont = go0
             LUndef -> goTwo k1 k2 (i + 1)
             LTrue  -> kont Satisfied_
             LFalse -> goTwo k1 k2 (i + 1)
+
+#ifdef ENABLE_ASSERTS
+assertClauseConflicting :: PartialAssignment s -> Clause2 -> ST s ()
+assertClauseConflicting pa c =
+    satisfied2_ pa c $ \case
+        Conflicting_ -> return ()
+        ot           -> assertST (show ot) False
+
+assertClauseUnit :: PartialAssignment s -> Clause2 -> ST s ()
+assertClauseUnit pa c =
+    satisfied2_ pa c $ \case
+        Unit_ {} -> return ()
+        ot       -> assertST (show ot) False
+
+assertClauseSatisfied :: PartialAssignment s -> Clause2 -> ST s ()
+assertClauseSatisfied pa c =
+    satisfied2_ pa c $ \case
+        Satisfied_ {} -> return ()
+        ot            -> assertST (show ot) False
+#endif
 
 -------------------------------------------------------------------------------
 -- Solver
@@ -513,6 +637,21 @@ data Trail
     | Decided !Lit !Trail
   deriving Show
 
+traceTrail :: forall s. LitTable s Clause2 -> Trail -> ST s ()
+traceTrail reasons trail = do
+    ls <- go trail
+    traceM $ unlines ls
+  where
+    go :: Trail -> ST s [String]
+    go End = return ["End"]
+    go (Deduced l t) = do
+        c <- readLitTable reasons l
+        ls <- go t
+        return ((showString "Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
+    go (Decided l t) = do
+        ls <- go t
+        return ((showString "Decided " . showsPrec 11 l) "" : ls)
+
 solve :: Solver s -> ST s Bool
 solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     clauses' <- readSTRef clauses
@@ -521,7 +660,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
     litCount <- readSTRef nextLit
     units    <- newLitSet litCount
-    reasons  <- newLitTable litCount nullClause
+    reasons  <- newLitTable litCount nullClause3
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
 
@@ -558,19 +697,60 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
         False -> unsat solver
         True  -> return True
 
+restart :: Self s -> Lit -> Trail -> ST s Bool
+restart self@Self {..} l trail = do
+    TRACING(traceM ("restart " ++ show l))
+
+    unwind trail
+    clearLitSet units
+    insertLitSet l units
+    res <- initialLoop self
+
+    if res
+    then solveLoop self End
+    else return False
+  where
+    unwind End = return ()
+    unwind (Deduced l' t) = do
+        unsetLiteral self l'
+        unwind t
+    unwind (Decided l' t) = do
+        unsetLiteral self l'
+        unwind t
+
+setLiteral1 :: Self s -> Lit -> ST s ()
+setLiteral1 Self {..} l = do
+    -- TODO: assert l not in pa
+    -- TODO: assert (litToVar l) in vars
+    insertPartialAssignment l pa
+    deleteVarSet (litToVar l) vars
+
+setLiteral2 :: Self s -> Lit -> ST s ()
+setLiteral2 Self {..} l = do
+    -- TODO: assert l not in pa
+    -- TODO: assert (litToVar l) not in vars
+    insertPartialAssignment l pa
+
+unsetLiteral :: Self s -> Lit -> ST s ()
+unsetLiteral Self {..} l = do
+    -- TODO: assert l in pa
+    -- TODO: assert (litToVar l) not in vars
+    deletePartialAssignment l pa
+    insertVarSet (litToVar l) vars
+
 solveLoop :: forall s. Self s -> Trail -> ST s Bool
 solveLoop self@Self {..} !trail = minViewLitSet units noUnit yesUnit
   where
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
         LUndef -> do
-            insertPartialAssignment l pa
-            deleteVarSet (litToVar l) vars
+            setLiteral1 self l
             unitPropagate self l (Deduced l trail)
 
         LFalse -> do
             c <- readLitTable reasons l
-            -- traceM $ "yes conf " ++ show (l, c, trail)
+            -- traceM $ "backtrack unit " ++ show (l, c)
+            -- traceTrail reasons trail
             backtrack self c trail
 
         LTrue  -> solveLoop self trail
@@ -583,20 +763,28 @@ solveLoop self@Self {..} !trail = minViewLitSet units noUnit yesUnit
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
-        -- traceM $ "decide" ++ show v
-        let !l = varToLit v
+        TRACING(traceM ("loop: decide var " ++ show l))
 
-        insertPartialAssignment l pa
+        setLiteral2 self l
         writeLitTable reasons l nullClause
         unitPropagate self l (Decided l trail)
+      where
+        !l = varToLit v
+
+foundUnitClause :: Self s -> Lit -> Clause2 -> ST s ()
+foundUnitClause Self{..} l c = do
+#ifdef ENABLE_ASSERTS
+    -- TODO: literalInClause l c
+#endif
+    insertLitSet l units
+    writeLitTable reasons l c
 
 unitPropagate :: forall s. Self s -> Lit -> Trail -> ST s Bool
 
 #ifdef TWO_WATCHED_LITERALS
 
 unitPropagate self@Self {..} !l !trail  = do
-    -- dbSize <- _sizeofClauseDB clauseDb
-    -- traceM $ "unitPropagate " ++ show (l, dbSize)
+    TRACING(traceM ("unitPropagate " ++ show l))
     watches <- lookupClauseDB (neg l) clauseDB
     size <- sizeofVec watches
     go watches 0 0 size
@@ -613,9 +801,7 @@ unitPropagate self@Self {..} !l !trail  = do
             let kontUnitPropagate = \case
                     Conflicting_      -> do
                         writeVec watches j w
-
                         copy watches (i + 1) (j + 1) size
-
                         backtrack self c trail
 
                     Satisfied_        -> do
@@ -624,8 +810,7 @@ unitPropagate self@Self {..} !l !trail  = do
 
                     Unit_ u           -> do
                         writeVec watches j w
-                        insertLitSet u units
-                        writeLitTable reasons l c
+                        foundUnitClause self u c
                         go watches (i + 1) (j + 1) size
 
                     Unresolved_ l1 l2
@@ -664,30 +849,174 @@ unitPropagate self@Self {..} _l trail = go clauseDB
         Conflicting_    -> backtrack self c trail
         Satisfied_      -> go cs
         Unit_ u         -> do
-            insertLitSet u units
-            writeLitTable reasons l c
+            foundUnitClause self u c
             go cs
         Unresolved_ _ _ -> go cs
 #endif
 
+traceCause :: LitSet s -> ST s ()
+traceCause sandbox = do
+    xs <- elemsLitSet sandbox
+    traceM $ "current cause " ++ show xs
+
 backtrack :: Self s -> Clause2 -> Trail -> ST s Bool
-backtrack self@Self {..} !_cause tr = do
-    -- traceM $ "backtrack reason " ++ show (_cause, tr)
+backtrack self@Self {..} !cause tr = do
+    TRACING(traceM ("backtrack reason " ++ show cause))
+    TRACING(traceTrail reasons tr)
+    clearLitSet sandbox
+    forLitInClause2_ cause $ \l -> insertLitSet l sandbox
+    TRACING(traceCause sandbox)
     go tr
   where
     go End               = return False
     go (Deduced l trail) = do
-        _c <- readLitTable reasons l
-        deletePartialAssignment l pa
-        insertVarSet (litToVar l) vars
-        go trail
+        TRACING(traceM ("backtrack deduce " ++ show l))
+        ASSERTING(assertLiteralInPartialAssignment l pa)
+
+        unsetLiteral self l
+        b <- memberLitSet sandbox (neg l)
+        if b
+        then do
+            c <- readLitTable reasons l
+            TRACING(traceM ("deduced undo " ++ show l ++ " " ++ show c))
+            ASSERTING(assertST "literal in reason clause" $ litInClause l c)
+
+            -- resolution of current conflict with the deduction cause
+            forLitInClause2_ c $ \l' -> insertLitSet l' sandbox
+            deleteLitSet l       sandbox
+            deleteLitSet (neg l) sandbox
+
+{-
+        conflictCause <- litSetToClause sandbox
+        satisfied2_ pa conflictCause $ \case
+            Conflicting_ -> return ()
+            ot           -> assertST (show ot) False
+-}
+
+            TRACING(traceCause sandbox)
+            sizeofLitSet sandbox >>= \case
+                1 -> unsingletonLitSet sandbox >>= \l' -> restart self l' trail
+                _ -> go trail
+
+        else do
+            -- assertConflict
+            TRACING(traceM ("deduced skip " ++ show l))
+            ASSERTING(conflictCause <- litSetToClause sandbox)
+            ASSERTING(assertClauseConflicting pa conflictCause)
+            go trail
+
     go (Decided l trail) = do
-        deletePartialAssignment l pa
-        insertPartialAssignment (neg l) pa
-        clearLitSet units
-        let conflictCause = nullClause -- TODO
-        writeLitTable reasons (neg l) conflictCause
-        unitPropagate self (neg l) (Deduced (neg l) trail)
+        TRACING(traceM ("decided " ++ show l))
+        TRACING(traceCause sandbox)
+        TRACING(traceTrail reasons trail)
+        ASSERTING(assertLiteralInPartialAssignment l pa)
+
+        b <- memberLitSet sandbox (neg l)
+        if b
+        then do
+            TRACING(traceM ("decided flip " ++ show l))
+            conflictCause <- litSetToClause sandbox
+            ASSERTING(assertClauseConflicting pa conflictCause)
+
+            -- TODO: toggleLiteral self pa
+            deletePartialAssignment l pa
+            ASSERTING(assertClauseUnit pa conflictCause)
+
+            insertPartialAssignment (neg l) pa
+            ASSERTING(assertClauseSatified pa conflictCause)
+
+            clearLitSet units
+
+            writeLitTable reasons (neg l) conflictCause
+            unitPropagate self (neg l) (Deduced (neg l) trail)
+
+        else do
+            TRACING(traceM ("decided skip " ++ show l))
+            -- continue
+            deletePartialAssignment l pa
+            insertVarSet (litToVar l) vars
+
+            ASSERTING(conflictCause <- litSetToClause sandbox)
+            ASSERTING(assertClauseConflicting pa conflictCause)
+
+            go trail
+
+-------------------------------------------------------------------------------
+-- initial loop
+-------------------------------------------------------------------------------
+
+initialLoop :: forall s. Self s -> ST s Bool
+initialLoop self@Self {..} = minViewLitSet units noUnit yesUnit
+  where
+    noUnit :: ST s Bool
+    noUnit = return True
+
+    yesUnit :: Lit -> ST s Bool
+    yesUnit !l = lookupPartialAssignment l pa >>= \case
+        LTrue  -> initialLoop self
+        LFalse -> return False
+        LUndef -> do
+            setLiteral1 self l
+            initialUnitPropagate self l
+
+initialUnitPropagate :: forall s. Self s -> Lit -> ST s Bool
+initialUnitPropagate self@Self {..} l = do
+    let _unused = l
+    TRACING(traceM ("initialUnitPropagate " ++ show l))
+#ifdef TWO_WATCHED_LITERALS
+    clearClauseDB clauseDB l
+    watches <- lookupClauseDB (neg l) clauseDB
+    size <- sizeofVec watches
+    go watches 0 0 size
+  where
+    go :: Vec s Watch -> Int -> Int -> Int -> ST s Bool
+    go !watches !i !j !size
+        | i >= size
+        = do
+            shrinkVec watches j
+            initialLoop self
+
+        | otherwise
+        = readVec watches i >>= \ w@(W l' c) ->
+          satisfied2_ pa c (kontInitialUnitPropagate w l')
+      where
+        {-# INLINE [1] kontInitialUnitPropagate #-}
+        kontInitialUnitPropagate w l' = \case
+            Conflicting_ -> return False
+            Satisfied_ -> do
+                go watches (i + 1) j size
+            Unit_ u -> do
+                insertLitSet u units
+                go watches (i + 1) j size
+            Unresolved_ l1 l2
+                | l2 /= l', l2 /= l
+                -> do
+                    insertWatch l2 w clauseDB
+                    go watches (i + 1) j size
+
+                | l1 /= l', l1 /= l
+                -> do
+                    insertWatch l1 w clauseDB
+                    go watches (i + 1) j size
+
+                | otherwise
+                -> error ("watch" ++ show (l, l1, l2, l'))
+#else
+    go clauseDB
+  where
+    go [] = initialLoop self
+    go (c:cs) = satisfied2_ pa c (kontInitialUnitPropagate cs)
+
+    {-# INLINE [1] kontInitialUnitPropagate #-}
+    kontInitialUnitPropagate :: [Clause2] -> Satisfied_ -> ST s Bool
+    kontInitialUnitPropagate cs = \case
+        Conflicting_    -> return False
+        Unresolved_ _ _ -> go cs
+        Satisfied_      -> go cs
+        Unit_ u         -> do
+            insertLitSet u units
+            go cs
+#endif
 
 -------------------------------------------------------------------------------
 -- simplify

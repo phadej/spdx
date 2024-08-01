@@ -209,7 +209,7 @@ insertSparseHeap heap@SH {..} x = checking "insert" heap $ do
 -- >>> runST $ do { set <- newSparseHeap 100; deleteSparseHeap set 10; elemsSparseHeap set }
 -- []
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 10; elemsSparseHeap set }
 -- [3,5,7,11,13]
@@ -342,7 +342,7 @@ swim !_n !dense !sparse !weight !i !x !u
 
 -- | Modify weight of the element.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
 -- >>> let populate heap = mapM_ (insert heap) [5,3,7,11,13,11]
 -- >>> let populate' heap = mapM_ (insertSparseHeap heap) [5,3,7,11,13,11]
 --
@@ -384,7 +384,7 @@ modifyWeightSparseHeap heap@SH {..} x f = checking "modify" heap $ do
 
 -- | Pop element from the heap.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { heap <- newSparseHeap 100; mapM_ (insert heap) [5,3,7,11,13,11]; popSparseHeap heap }
 -- Just 3
@@ -448,7 +448,7 @@ elemsSparseHeap SH {..} = do
 
 -- | Drain element from the heap.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x; 
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; drainSparseHeap set }
 -- [3,5,7,11,13]
