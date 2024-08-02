@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module SparseSet (
-    SparseSet,
+    SparseSet (..),
     sizeofSparseSet,
     newSparseSet,
     memberSparseSet,
@@ -99,7 +99,7 @@ memberSparseSet set@SS {..} x = do
 -- | Insert into set
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; elemsSparseSet set }
--- [13,11,7,5,3]
+-- [3,5,7,11,13]
 --
 insertSparseSet :: SparseSet s -> Int -> ST s ()
 insertSparseSet set@SS {..} x = do
@@ -125,13 +125,13 @@ insertSparseSet set@SS {..} x = do
 -- []
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; deleteSparseSet set 10; elemsSparseSet set }
--- [13,11,7,5,3]
+-- [3,5,7,11,13]
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; deleteSparseSet set 13; elemsSparseSet set }
--- [11,7,5,3]
+-- [3,5,7,11]
 --
 -- >>> runST $ do { set <- newSparseSet 100; mapM_ (insertSparseSet set) [3,5,7,11,13,11]; deleteSparseSet set 11; elemsSparseSet set }
--- [13,7,5,3]
+-- [3,5,7,13]
 --
 deleteSparseSet :: SparseSet s -> Int -> ST s ()
 deleteSparseSet set@SS {..} x = do
@@ -210,4 +210,4 @@ elemsSparseSet SS {..} = do
             go (x : acc) (i + 1) n
 
         | otherwise
-        = return acc
+        = return (reverse acc)
