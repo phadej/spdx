@@ -537,7 +537,7 @@ restart self@Self {..} l = do
 
     clearLitSet units
     insertLitSet l units
-    res <- initialLoop self
+    res <- initialLoop clauseDB units vars pa
 
     ASSERTING(assertEmptyTrail trail)
     if res
@@ -795,22 +795,23 @@ backtrack self@Self {..} !cause = do
 -- initial loop
 -------------------------------------------------------------------------------
 
-initialLoop :: forall s. Self s -> ST s Bool
-initialLoop self@Self {..} = minViewLitSet units noUnit yesUnit
+initialLoop :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> ST s Bool
+initialLoop clauseDB units vars pa = minViewLitSet units noUnit yesUnit
   where
     noUnit :: ST s Bool
     noUnit = return True
 
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
-        LTrue  -> initialLoop self
+        LTrue  -> initialLoop clauseDB units vars pa
         LFalse -> return False
         LUndef -> do
-            setLiteral1 self l
-            initialUnitPropagate self l
+            insertPartialAssignment l pa
+            deleteVarSet (litToVar l) vars
+            initialUnitPropagate clauseDB units vars pa l
 
-initialUnitPropagate :: forall s. Self s -> Lit -> ST s Bool
-initialUnitPropagate self@Self {..} l = do
+initialUnitPropagate :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> Lit -> ST s Bool
+initialUnitPropagate clauseDB units vars pa l = do
     let _unused = l
     TRACING(traceM ("initialUnitPropagate " ++ show l))
 #ifdef TWO_WATCHED_LITERALS
@@ -824,7 +825,7 @@ initialUnitPropagate self@Self {..} l = do
         | i >= size
         = do
             shrinkVec watches j
-            initialLoop self
+            initialLoop clauseDB units vars pa
 
         | otherwise
         = readVec watches i >>= \ w@(W l' c) ->
