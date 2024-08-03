@@ -358,9 +358,9 @@ swim !_n !dense !sparse !weight !i !x !u
 -- Just 7
 --
 modifyWeightSparseHeap :: forall s. SparseHeap s -> Int -> (Int -> Int) -> ST s ()
-modifyWeightSparseHeap heap@SH {..} x f = checking "modify" heap $ do
+modifyWeightSparseHeap heap@SH {..} !x f = checking "modify" heap $ do
     u' <- readPrimArray weight x
-    let u = f u'
+    let !u = f u'
     writePrimArray weight x u
 
     if u == u'
@@ -375,12 +375,13 @@ modifyWeightSparseHeap heap@SH {..} x f = checking "modify" heap $ do
         else return ()
   where
     balance :: Int -> Int -> Int -> Int -> ST s ()
-    balance n i u u'
+    balance !n !i !u !u'
         | u >= u'
         = swim n dense sparse weight i x u
 
         | otherwise
         = sink n dense sparse weight i x u
+{-# INLINE modifyWeightSparseHeap #-}
 
 -- | Pop element from the heap.
 --

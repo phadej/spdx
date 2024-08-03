@@ -28,11 +28,13 @@ common language
   default-extensions:
     BangPatterns
     DeriveTraversable
+    DerivingStrategies
     GADTs
     PatternSynonyms
     RankNTypes
     RoleAnnotations
     ScopedTypeVariables
+    StandaloneDeriving
     StandaloneKindSignatures
     TypeApplications
 
@@ -62,6 +64,12 @@ library sat-simple-pure
     Assert
     Control.Monad.SAT
     DPLL
+    DPLL.Clause2
+    DPLL.LBool
+    DPLL.LitSet
+    DPLL.LitTable
+    DPLL.LitVar
+    DPLL.VarSet
     EST
     LCG
     Lifted

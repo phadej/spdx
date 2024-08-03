@@ -1,11 +1,8 @@
 {-# LANGUAGE CPP                        #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MagicHash                  #-}
 {-# LANGUAGE NoFieldSelectors           #-}
 {-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module DPLL (
     Solver,
@@ -24,14 +21,11 @@ module DPLL (
 -- #define ENABLE_TRACE
 
 #define TWO_WATCHED_LITERALS
--- #define INTSET_VARS
 
 import Control.Monad.ST     (ST)
-import Data.Bits            (complementBit, testBit, unsafeShiftL, unsafeShiftR)
-import Data.Coerce          (coerce)
+import Data.Bits            (testBit, unsafeShiftR)
 import Data.Functor         ((<&>))
 import Data.List            (nub)
-import Data.Primitive.Types (Prim)
 import Data.STRef           (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word            (Word8)
 
@@ -49,90 +43,32 @@ import Assert
 #endif
 
 import LCG
-import SparseSet
+import DPLL.LBool
+import DPLL.LitVar
+import DPLL.LitSet
+import DPLL.VarSet
+import DPLL.LitTable
+import DPLL.Clause2
 
 import Control.Monad            (forM_)
-import Data.Primitive.Array     (MutableArray, newArray, readArray, writeArray)
-import Data.Primitive.PrimArray (traversePrimArray_)
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
 #endif
 
-#ifdef INTSET_VARS
-import qualified Data.IntSet as IS
-import           Data.STRef  (modifySTRef)
-#else
-import SparseMaxHeap
-#endif
-
-import Unsafe.Coerce (unsafeCoerce)
-
-import Debug.Trace
-import GHC.Stack
-
-coercePrimArrayLit :: PrimArray Int -> PrimArray Lit
-coercePrimArrayLit = unsafeCoerce
-
 #ifdef ENABLE_TRACE
+import Debug.Trace
 #define TRACING(x) x
 #else
 #define TRACING(x)
 #endif
 
 #ifdef ENABLE_ASSERTS
+import GHC.Stack
 #define ASSERTING(x) x
 #else
 #define ASSERTING(x)
 #endif
-
--------------------------------------------------------------------------------
--- Literals
--------------------------------------------------------------------------------
-
--- | Literals
-newtype Lit = MkLit Int
-  deriving (Eq, Ord)
-
-instance Show Lit where
-    showsPrec d (MkLit l)
-        | testBit l 0 = showParen (d > 10) $ showChar '-' . shows (lit_to_var l)
-        | otherwise   = shows (lit_to_var l)
-
-deriving newtype instance Prim Lit
-
--- | Negate literal
-neg :: Lit -> Lit
-neg (MkLit l) = MkLit (complementBit l 0)
-
--- unLit :: Lit -> Int
--- unLit (MkLit l) = l
-
--------------------------------------------------------------------------------
--- Variables
--------------------------------------------------------------------------------
-
-newtype Var = MkVar Int
-  deriving (Eq, Ord, Show)
-
-litToVar :: Lit -> Var
-litToVar (MkLit l) = MkVar (lit_to_var l)
-
-lit_to_var :: Int -> Int
-lit_to_var l = unsafeShiftR l 1
-
-varToLit :: Var -> Lit
-varToLit (MkVar x) = MkLit (var_to_lit x)
-
-var_to_lit :: Int -> Int
-var_to_lit l = unsafeShiftL l 1
-
--------------------------------------------------------------------------------
--- LBool
--------------------------------------------------------------------------------
-
-data LBool = LFalse | LTrue | LUndef
-  deriving (Eq, Ord, Show)
 
 -------------------------------------------------------------------------------
 -- Stats
@@ -177,6 +113,7 @@ deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
 deletePartialAssignment (MkLit l) (PA arr) = do
     writeByteArray arr (lit_to_var l) (0xff :: Word8)
 
+#ifdef ENABLE_TRACE
 tracePartialAssignment :: PartialAssignment s -> ST s ()
 tracePartialAssignment (PA arr) = do
     n <- getSizeofMutableByteArray arr
@@ -193,6 +130,7 @@ tracePartialAssignment (PA arr) = do
 
         | otherwise
         = return (reverse acc)
+#endif
 
 #ifdef ENABLE_ASSERTS
 assertLiteralInPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
@@ -203,138 +141,10 @@ assertLiteralInPartialAssignment l pa =
 #endif
 
 -------------------------------------------------------------------------------
--- VarSet
--------------------------------------------------------------------------------
-
-#ifdef INTSET_VARS
-newtype VarSet s = VS (STRef s IS.IntSet)
-
-newVarSet :: ST s (VarSet s)
-newVarSet = VS <$> newSTRef IS.empty
-
-extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
-extendVarSet _ x = return x
-
-weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
-weightVarSet _ _ _ = return ()
-
-insertVarSet :: Var -> VarSet s -> ST s ()
-insertVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.insert x)
-
-deleteVarSet :: Var -> VarSet s -> ST s ()
-deleteVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.delete x)
-
-clearVarSet :: VarSet s -> ST s ()
-clearVarSet (VS xs) = writeSTRef xs IS.empty
-
-minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
-minViewVarSet (VS xs) no yes = do
-    is <- readSTRef xs
-    case IS.minView is of
-        Nothing -> no
-        Just (x, is') -> do
-            writeSTRef xs is'
-            yes (MkVar x)
-
-#else
-
-newtype VarSet s = VS (SparseHeap s)
-
-newVarSet :: ST s (VarSet s)
-newVarSet = VS <$> newSparseHeap 0
-
-extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
-extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
-
-weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
-weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
-
-insertVarSet :: Var -> VarSet s -> ST s ()
-insertVarSet (MkVar x) (VS xs) = do
-    insertSparseHeap xs x
-
-deleteVarSet :: Var -> VarSet s -> ST s ()
-deleteVarSet (MkVar x) (VS xs) = do
-    deleteSparseHeap xs x
-
-clearVarSet :: VarSet s -> ST s ()
-clearVarSet (VS xs) = clearSparseHeap xs
-
-{-# INLINE minViewVarSet #-}
-minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
-minViewVarSet (VS xs) no yes = popSparseHeap_ xs no (coerce yes)
-
-#endif
-
--------------------------------------------------------------------------------
--- LitSet
--------------------------------------------------------------------------------
-
-newtype LitSet s = LS (SparseSet s)
-
-newLitSet :: Int -> ST s (LitSet s)
-newLitSet n = LS <$> newSparseSet n
-
-insertLitSet :: Lit -> LitSet s -> ST s ()
-insertLitSet (MkLit l) (LS ls) = insertSparseSet ls l
-
-deleteLitSet :: Lit -> LitSet s -> ST s ()
-deleteLitSet (MkLit l) (LS ls) = deleteSparseSet ls l
-
-{-# INLINE minViewLitSet #-}
-minViewLitSet :: LitSet s -> ST s r -> (Lit -> ST s r) -> ST s r
-minViewLitSet (LS xs) no yes = popSparseSet_ xs no (coerce yes)
-
-clearLitSet :: LitSet s -> ST s ()
-clearLitSet (LS xs) = clearSparseSet xs
-
-elemsLitSet :: LitSet s -> ST s [Lit]
-elemsLitSet (LS s) = coerce (elemsSparseSet s)
-
-memberLitSet :: LitSet s -> Lit -> ST s Bool
-memberLitSet (LS xs) (MkLit x) = memberSparseSet xs x
-
-sizeofLitSet :: LitSet s -> ST s Int
-sizeofLitSet (LS xs) = sizeofSparseSet xs
-
-litSetToClause :: LitSet s -> ST s Clause2
-litSetToClause (LS SS {..}) = do
-    n <- readPrimVar size
-    ASSERTING(assertST "size >= 2" (n >= 2))
-    l1 <- readPrimArray dense 0
-    l2 <- readPrimArray dense 1
-    ls <- freezePrimArray dense 2 (n - 2)
-    return $! MkClause2 (coerce l1) (coerce l2) (coercePrimArrayLit ls)
-
-unsingletonLitSet :: LitSet s -> ST s Lit
-unsingletonLitSet (LS SS {..}) = do
-    ASSERTING(n <- readPrimVar size)
-    ASSERTING(assertST "size == 1" (n == 1))
-    x <- readPrimArray dense 0
-    return (MkLit x)
-
--------------------------------------------------------------------------------
 -- Clauses
 -------------------------------------------------------------------------------
 
 type Clauses = [Clause2]
-
--------------------------------------------------------------------------------
--- LitTable
--------------------------------------------------------------------------------
-
-newtype LitTable s a = LitT (MutableArray s a)
-
-newLitTable :: Int -> a -> ST s (LitTable s a)
-newLitTable !size x = do
-    xs <- newArray size x
-    return (LitT xs)
-
-readLitTable :: LitTable s a -> Lit -> ST s a
-readLitTable (LitT xs) (MkLit l) = readArray xs l
-
-writeLitTable :: LitTable s a -> Lit -> a -> ST s ()
-writeLitTable (LitT xs) (MkLit l) x = writeArray xs l x
 
 -------------------------------------------------------------------------------
 -- ClauseDB
@@ -418,23 +228,6 @@ satisfied !pa = go0 . nub where
 -------------------------------------------------------------------------------
 -- Clause2
 -------------------------------------------------------------------------------
-
-data Clause2 = MkClause2 {-# UNPACK #-} !Lit {-# UNPACK #-} !Lit {-# UNPACK #-} !(PrimArray Lit)
-  deriving Show
-
-litInClause :: Lit -> Clause2 -> Bool
-litInClause l (MkClause2 l1 l2 ls) =
-    l == l1 || l == l2 || foldrPrimArray (\l' next -> l' == l || next) False ls
-
-forLitInClause2_ :: Applicative f => Clause2 -> (Lit -> f b) -> f ()
-forLitInClause2_ (MkClause2 l1 l2 ls) f =
-    f l1 *> f l2 *> traversePrimArray_ f ls
-
-nullClause :: Clause2
-nullClause = MkClause2 (MkLit 1) (MkLit 1) emptyPrimArray
-
-isNullClause :: Clause2 -> Bool
-isNullClause (MkClause2 l1 l2 _) = l1 == l2
 
 data Satisfied_
     = Satisfied_
@@ -566,9 +359,10 @@ newLit Solver {..} = do
     return l
 
 boost :: Int -> Int
-boost n
+boost !n
     | n <= 0    = 1
     | otherwise = n + 1
+{-# INLINE [1] boost #-}
 
 _decay :: Int -> Int
 _decay n = unsafeShiftR n 1
@@ -630,6 +424,7 @@ pushTrail l (Trail size ls) = do
     writePrimVar size (n + 1)
     writePrimArray ls n l
 
+#ifdef ENABLE_TRACE
 traceTrail :: forall s. LitTable s Clause2 -> Trail s -> ST s ()
 traceTrail reasons (Trail size ls) = do
     n <- readPrimVar size
@@ -649,12 +444,15 @@ traceTrail reasons (Trail size ls) = do
             if isNullClause c
             then return ((showString "Decided " . showsPrec 11 l) "" : ls)
             else return ((showString "Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
+#endif
 
+#ifdef ENABLE_ASSERTS
 assertEmptyTrail :: HasCallStack => Trail s -> ST s ()
 assertEmptyTrail (Trail size _) = do
     n <- readPrimVar size
     ASSERTING (assertST "n == 0" $ n == 0)
     return ()
+#endif
 
 -------------------------------------------------------------------------------
 -- Solving
@@ -699,22 +497,9 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
-    forM_ clauses' $ \c@(MkClause2 a b d) ->
+    forM_ clauses' $ \ !c ->
         let kontSolve = \case
                 Unresolved_ l1 l2 -> do
-                    if sizeofPrimArray d == 0
-                    then do
-                        weightVarSet (litToVar a) (boost . boost . boost) vars
-                        weightVarSet (litToVar b) (boost . boost . boost) vars
-                    else if sizeofPrimArray d <= 2 then do
-                        weightVarSet (litToVar a) (boost . boost) vars
-                        weightVarSet (litToVar b) (boost . boost) vars
-                        traversePrimArray_ (\l -> weightVarSet (litToVar l) (boost . boost) vars) d
-                    else do
-                        weightVarSet (litToVar a) boost vars
-                        weightVarSet (litToVar b) boost vars
-                        traversePrimArray_ (\l -> weightVarSet (litToVar l) boost vars) d
-
                     insertClauseDB l1 l2 c clauseDB
                 _                 -> error "PANIC! not simplified DB"
             {-# INLINE [1] kontSolve #-}
@@ -738,7 +523,7 @@ restart self@Self {..} l = do
 
     clearLitSet units
     insertLitSet l units
-    res <- initialLoop self
+    res <- initialLoop clauseDB units vars pa
 
     ASSERTING(assertEmptyTrail trail)
     if res
@@ -896,10 +681,12 @@ unitPropagate self@Self {..} _l trail = go clauseDB
         Unresolved_ _ _ -> go cs
 #endif
 
+#ifdef ENABLE_TRACE
 traceCause :: LitSet s -> ST s ()
 traceCause sandbox = do
     xs <- elemsLitSet sandbox
     traceM $ "current cause " ++ show xs
+#endif
 
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
@@ -907,10 +694,14 @@ backtrack self@Self {..} !cause = do
     TRACING(traceM ("backtrack reason " ++ show cause))
     TRACING(traceTrail reasons trail)
     clearLitSet sandbox
-    forLitInClause2_ cause $ \l -> insertLitSet l sandbox
+    forLitInClause2_ cause insertSandbox
     TRACING(traceCause sandbox)
     go size
-  where
+   where
+    insertSandbox :: Lit -> ST s ()
+    insertSandbox !l = insertLitSet l sandbox
+    {-# INLINE [1] insertSandbox #-}
+
     go :: PrimVar s Int -> ST s Bool
     go size = do
         n <- readPrimVar size
@@ -933,7 +724,7 @@ backtrack self@Self {..} !cause = do
                     ASSERTING(assertST "literal in reason clause" $ litInClause l c)
 
                     -- resolution of current conflict with the deduction cause
-                    forLitInClause2_ c $ \l' -> insertLitSet l' sandbox
+                    forLitInClause2_ c insertSandbox
                     deleteLitSet l       sandbox
                     deleteLitSet (neg l) sandbox
         {-
@@ -977,6 +768,11 @@ backtrack self@Self {..} !cause = do
 
                     clearLitSet units
 
+                    -- boost literals
+                    let boost' !cl = weightVarSet (litToVar cl) boost vars
+                        {-# INLINE [1] boost' #-}
+                    forLitInClause2_ conflictCause boost'
+
                     writeLitTable reasons (neg l) conflictCause
                     pushTrail (neg l) trail
                     unitPropagate self (neg l)
@@ -996,22 +792,23 @@ backtrack self@Self {..} !cause = do
 -- initial loop
 -------------------------------------------------------------------------------
 
-initialLoop :: forall s. Self s -> ST s Bool
-initialLoop self@Self {..} = minViewLitSet units noUnit yesUnit
+initialLoop :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> ST s Bool
+initialLoop clauseDB units vars pa = minViewLitSet units noUnit yesUnit
   where
     noUnit :: ST s Bool
     noUnit = return True
 
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
-        LTrue  -> initialLoop self
+        LTrue  -> initialLoop clauseDB units vars pa
         LFalse -> return False
         LUndef -> do
-            setLiteral1 self l
-            initialUnitPropagate self l
+            insertPartialAssignment l pa
+            deleteVarSet (litToVar l) vars
+            initialUnitPropagate clauseDB units vars pa l
 
-initialUnitPropagate :: forall s. Self s -> Lit -> ST s Bool
-initialUnitPropagate self@Self {..} l = do
+initialUnitPropagate :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> Lit -> ST s Bool
+initialUnitPropagate clauseDB units vars pa l = do
     let _unused = l
     TRACING(traceM ("initialUnitPropagate " ++ show l))
 #ifdef TWO_WATCHED_LITERALS
@@ -1025,7 +822,7 @@ initialUnitPropagate self@Self {..} l = do
         | i >= size
         = do
             shrinkVec watches j
-            initialLoop self
+            initialLoop clauseDB units vars pa
 
         | otherwise
         = readVec watches i >>= \ w@(W l' c) ->
