@@ -33,14 +33,9 @@ import Data.Primitive.ByteArray
        (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
        shrinkMutableByteArray, writeByteArray)
 import Data.Primitive.PrimArray
-       (PrimArray, emptyPrimArray, foldrPrimArray, freezePrimArray, indexPrimArray, primArrayFromList, readPrimArray,
-       sizeofPrimArray)
+       (indexPrimArray, primArrayFromList, sizeofPrimArray)
 import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray, newPrimArray)
 import Data.Primitive.PrimVar   (PrimVar, newPrimVar, writePrimVar, readPrimVar)
-
-#ifdef ENABLE_ASSERTS
-import Assert
-#endif
 
 import LCG
 import DPLL.LBool
@@ -64,6 +59,7 @@ import Debug.Trace
 #endif
 
 #ifdef ENABLE_ASSERTS
+import Assert
 import GHC.Stack
 #define ASSERTING(x) x
 #else
@@ -71,12 +67,6 @@ import GHC.Stack
 #endif
 
 import Debug.Trace
-
--------------------------------------------------------------------------------
--- Stats
--------------------------------------------------------------------------------
-
-data Stats s = MkStats (PrimArray Int)
 
 -------------------------------------------------------------------------------
 -- Partial Assignment
@@ -672,12 +662,12 @@ unitPropagate self@Self {..} !l  = do
         else shrinkVec watches j
 #else
 
-unitPropagate self@Self {..} _l trail = go clauseDB
+unitPropagate self@Self {..} _l = go clauseDB
   where
     go :: [Clause2] -> ST s Bool
-    go []     = solveLoop self trail
+    go []     = solveLoop self
     go (c:cs) = satisfied2_ pa c $ \case
-        Conflicting_    -> backtrack self c trail
+        Conflicting_    -> backtrack self c
         Satisfied_      -> go cs
         Unit_ u         -> do
             foundUnitClause self u c
@@ -856,7 +846,7 @@ initialUnitPropagate clauseDB units vars pa l = do
 #else
     go clauseDB
   where
-    go [] = initialLoop self
+    go [] = initialLoop clauseDB units vars pa
     go (c:cs) = satisfied2_ pa c (kontInitialUnitPropagate cs)
 
     {-# INLINE [1] kontInitialUnitPropagate #-}
