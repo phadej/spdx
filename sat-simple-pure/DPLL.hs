@@ -1,11 +1,8 @@
 {-# LANGUAGE CPP                        #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MagicHash                  #-}
 {-# LANGUAGE NoFieldSelectors           #-}
 {-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module DPLL (
     Solver,
@@ -24,7 +21,6 @@ module DPLL (
 -- #define ENABLE_TRACE
 
 #define TWO_WATCHED_LITERALS
--- #define INTSET_VARS
 
 import Control.Monad.ST     (ST)
 import Data.Bits            (complementBit, testBit, unsafeShiftL, unsafeShiftR)
@@ -50,6 +46,12 @@ import Assert
 
 import LCG
 import SparseSet
+import DPLL.LBool
+import DPLL.LitVar
+import DPLL.LitSet
+import DPLL.VarSet
+import DPLL.LitTable
+import DPLL.Clause2
 
 import Control.Monad            (forM_)
 import Data.Primitive.Array     (MutableArray, newArray, readArray, writeArray)
@@ -59,20 +61,10 @@ import Data.Primitive.PrimArray (traversePrimArray_)
 import Vec
 #endif
 
-#ifdef INTSET_VARS
-import qualified Data.IntSet as IS
-import           Data.STRef  (modifySTRef)
-#else
-import SparseMaxHeap
-#endif
-
 import Unsafe.Coerce (unsafeCoerce)
 
 import Debug.Trace
 import GHC.Stack
-
-coercePrimArrayLit :: PrimArray Int -> PrimArray Lit
-coercePrimArrayLit = unsafeCoerce
 
 #ifdef ENABLE_TRACE
 #define TRACING(x) x
@@ -85,54 +77,6 @@ coercePrimArrayLit = unsafeCoerce
 #else
 #define ASSERTING(x)
 #endif
-
--------------------------------------------------------------------------------
--- Literals
--------------------------------------------------------------------------------
-
--- | Literals
-newtype Lit = MkLit Int
-  deriving (Eq, Ord)
-
-instance Show Lit where
-    showsPrec d (MkLit l)
-        | testBit l 0 = showParen (d > 10) $ showChar '-' . shows (lit_to_var l)
-        | otherwise   = shows (lit_to_var l)
-
-deriving newtype instance Prim Lit
-
--- | Negate literal
-neg :: Lit -> Lit
-neg (MkLit l) = MkLit (complementBit l 0)
-
--- unLit :: Lit -> Int
--- unLit (MkLit l) = l
-
--------------------------------------------------------------------------------
--- Variables
--------------------------------------------------------------------------------
-
-newtype Var = MkVar Int
-  deriving (Eq, Ord, Show)
-
-litToVar :: Lit -> Var
-litToVar (MkLit l) = MkVar (lit_to_var l)
-
-lit_to_var :: Int -> Int
-lit_to_var l = unsafeShiftR l 1
-
-varToLit :: Var -> Lit
-varToLit (MkVar x) = MkLit (var_to_lit x)
-
-var_to_lit :: Int -> Int
-var_to_lit l = unsafeShiftL l 1
-
--------------------------------------------------------------------------------
--- LBool
--------------------------------------------------------------------------------
-
-data LBool = LFalse | LTrue | LUndef
-  deriving (Eq, Ord, Show)
 
 -------------------------------------------------------------------------------
 -- Stats
@@ -203,138 +147,10 @@ assertLiteralInPartialAssignment l pa =
 #endif
 
 -------------------------------------------------------------------------------
--- VarSet
--------------------------------------------------------------------------------
-
-#ifdef INTSET_VARS
-newtype VarSet s = VS (STRef s IS.IntSet)
-
-newVarSet :: ST s (VarSet s)
-newVarSet = VS <$> newSTRef IS.empty
-
-extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
-extendVarSet _ x = return x
-
-weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
-weightVarSet _ _ _ = return ()
-
-insertVarSet :: Var -> VarSet s -> ST s ()
-insertVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.insert x)
-
-deleteVarSet :: Var -> VarSet s -> ST s ()
-deleteVarSet (MkVar x) (VS xs) = modifySTRef xs (IS.delete x)
-
-clearVarSet :: VarSet s -> ST s ()
-clearVarSet (VS xs) = writeSTRef xs IS.empty
-
-minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
-minViewVarSet (VS xs) no yes = do
-    is <- readSTRef xs
-    case IS.minView is of
-        Nothing -> no
-        Just (x, is') -> do
-            writeSTRef xs is'
-            yes (MkVar x)
-
-#else
-
-newtype VarSet s = VS (SparseHeap s)
-
-newVarSet :: ST s (VarSet s)
-newVarSet = VS <$> newSparseHeap 0
-
-extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
-extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
-
-weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
-weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
-
-insertVarSet :: Var -> VarSet s -> ST s ()
-insertVarSet (MkVar x) (VS xs) = do
-    insertSparseHeap xs x
-
-deleteVarSet :: Var -> VarSet s -> ST s ()
-deleteVarSet (MkVar x) (VS xs) = do
-    deleteSparseHeap xs x
-
-clearVarSet :: VarSet s -> ST s ()
-clearVarSet (VS xs) = clearSparseHeap xs
-
-{-# INLINE minViewVarSet #-}
-minViewVarSet :: VarSet s -> ST s r -> (Var -> ST s r) -> ST s r
-minViewVarSet (VS xs) no yes = popSparseHeap_ xs no (coerce yes)
-
-#endif
-
--------------------------------------------------------------------------------
--- LitSet
--------------------------------------------------------------------------------
-
-newtype LitSet s = LS (SparseSet s)
-
-newLitSet :: Int -> ST s (LitSet s)
-newLitSet n = LS <$> newSparseSet n
-
-insertLitSet :: Lit -> LitSet s -> ST s ()
-insertLitSet (MkLit l) (LS ls) = insertSparseSet ls l
-
-deleteLitSet :: Lit -> LitSet s -> ST s ()
-deleteLitSet (MkLit l) (LS ls) = deleteSparseSet ls l
-
-{-# INLINE minViewLitSet #-}
-minViewLitSet :: LitSet s -> ST s r -> (Lit -> ST s r) -> ST s r
-minViewLitSet (LS xs) no yes = popSparseSet_ xs no (coerce yes)
-
-clearLitSet :: LitSet s -> ST s ()
-clearLitSet (LS xs) = clearSparseSet xs
-
-elemsLitSet :: LitSet s -> ST s [Lit]
-elemsLitSet (LS s) = coerce (elemsSparseSet s)
-
-memberLitSet :: LitSet s -> Lit -> ST s Bool
-memberLitSet (LS xs) (MkLit x) = memberSparseSet xs x
-
-sizeofLitSet :: LitSet s -> ST s Int
-sizeofLitSet (LS xs) = sizeofSparseSet xs
-
-litSetToClause :: LitSet s -> ST s Clause2
-litSetToClause (LS SS {..}) = do
-    n <- readPrimVar size
-    ASSERTING(assertST "size >= 2" (n >= 2))
-    l1 <- readPrimArray dense 0
-    l2 <- readPrimArray dense 1
-    ls <- freezePrimArray dense 2 (n - 2)
-    return $! MkClause2 (coerce l1) (coerce l2) (coercePrimArrayLit ls)
-
-unsingletonLitSet :: LitSet s -> ST s Lit
-unsingletonLitSet (LS SS {..}) = do
-    ASSERTING(n <- readPrimVar size)
-    ASSERTING(assertST "size == 1" (n == 1))
-    x <- readPrimArray dense 0
-    return (MkLit x)
-
--------------------------------------------------------------------------------
 -- Clauses
 -------------------------------------------------------------------------------
 
 type Clauses = [Clause2]
-
--------------------------------------------------------------------------------
--- LitTable
--------------------------------------------------------------------------------
-
-newtype LitTable s a = LitT (MutableArray s a)
-
-newLitTable :: Int -> a -> ST s (LitTable s a)
-newLitTable !size x = do
-    xs <- newArray size x
-    return (LitT xs)
-
-readLitTable :: LitTable s a -> Lit -> ST s a
-readLitTable (LitT xs) (MkLit l) = readArray xs l
-
-writeLitTable :: LitTable s a -> Lit -> a -> ST s ()
-writeLitTable (LitT xs) (MkLit l) x = writeArray xs l x
 
 -------------------------------------------------------------------------------
 -- ClauseDB
@@ -418,23 +234,6 @@ satisfied !pa = go0 . nub where
 -------------------------------------------------------------------------------
 -- Clause2
 -------------------------------------------------------------------------------
-
-data Clause2 = MkClause2 {-# UNPACK #-} !Lit {-# UNPACK #-} !Lit {-# UNPACK #-} !(PrimArray Lit)
-  deriving Show
-
-litInClause :: Lit -> Clause2 -> Bool
-litInClause l (MkClause2 l1 l2 ls) =
-    l == l1 || l == l2 || foldrPrimArray (\l' next -> l' == l || next) False ls
-
-forLitInClause2_ :: Applicative f => Clause2 -> (Lit -> f b) -> f ()
-forLitInClause2_ (MkClause2 l1 l2 ls) f =
-    f l1 *> f l2 *> traversePrimArray_ f ls
-
-nullClause :: Clause2
-nullClause = MkClause2 (MkLit 1) (MkLit 1) emptyPrimArray
-
-isNullClause :: Clause2 -> Bool
-isNullClause (MkClause2 l1 l2 _) = l1 == l2
 
 data Satisfied_
     = Satisfied_
