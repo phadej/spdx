@@ -43,13 +43,12 @@ module Control.Monad.SAT (
     solve_,
     -- * Simplification
     simplify,
-{-
     -- * Statistics
     numberOfVariables,
     numberOfClauses,
     numberOfLearnts,
     numberOfConflicts,
--}
+    numberOfRestarts,
 ) where
 
 import Control.Monad   (forM_, unless)
@@ -543,20 +542,22 @@ simplify = SAT $ \s _t _r -> do
 -- Statistics
 -------------------------------------------------------------------------------
 
-{-
 -- | The current number of variables.
 numberOfVariables :: SAT s Int
-numberOfVariables = SAT $ \s _t _r -> DPLL.DPLL_num_vars s
+numberOfVariables = SAT $ \s _t _r -> liftST $ DPLL.num_vars s
 
 -- | The current number of original clauses.
 numberOfClauses :: SAT s Int
-numberOfClauses = SAT $ \s _t _r -> DPLL.DPLL_num_clauses s
+numberOfClauses = SAT $ \s _t _r -> liftST $ DPLL.num_clauses s
 
 -- | The current number of learnt clauses.
 numberOfLearnts :: SAT s Int
-numberOfLearnts = SAT $ \s _t _r -> DPLL.DPLL_num_learnts s
+numberOfLearnts = SAT $ \s _t _r -> liftST $ DPLL.num_learnts s
 
 -- | The current number of conflicts.
 numberOfConflicts :: SAT s Int
-numberOfConflicts = SAT $ \s _t _r -> DPLL.DPLL_num_conflicts s
--}
+numberOfConflicts = SAT $ \s _t _r -> liftST $ DPLL.num_conflicts s
+
+-- | The current number of conflicts.
+numberOfRestarts :: SAT s Int
+numberOfRestarts = SAT $ \s _t _r -> liftST $ DPLL.num_restarts s

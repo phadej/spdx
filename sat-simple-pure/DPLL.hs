@@ -15,6 +15,12 @@ module DPLL (
     solve,
     simplify,
     modelValue,
+    -- * Statistics
+    num_vars,
+    num_clauses,
+    num_learnts,
+    num_conflicts,
+    num_restarts,
 ) where
 
 -- #define ENABLE_ASSERTS
@@ -39,13 +45,13 @@ import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray
 import Data.Primitive.PrimVar   (PrimVar, newPrimVar, writePrimVar, readPrimVar)
 
 import LCG
-import DPLL.LBool
-import DPLL.LitVar
-import DPLL.LitSet
-import DPLL.VarSet
-import DPLL.LitTable
 import DPLL.Clause2
-
+import DPLL.LBool
+import DPLL.LitSet
+import DPLL.LitTable
+import DPLL.LitVar
+import DPLL.Stats
+import DPLL.VarSet
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
@@ -327,27 +333,29 @@ assertClauseSatisfied pa c =
 
 -- | Solver
 data Solver s = Solver
-    { ok        :: !(STRef s Bool)
-    , nextLit   :: !(STRef s Int) -- TODO: change to PrimVar
-    , solution  :: !(STRef s (PartialAssignment s))
-    , variables :: !(STRef s (VarSet s))
-    , clauses   :: !(STRef s (ClauseDB s))
-    , lcg       :: !(LCG s)
+    { ok         :: !(STRef s Bool)
+    , nextLit    :: !(STRef s Int) -- TODO: change to PrimVar
+    , solution   :: !(STRef s (PartialAssignment s))
+    , variables  :: !(STRef s (VarSet s))
+    , clauses    :: !(STRef s (ClauseDB s))
+    , lcg        :: !(LCG s)
+    , statistics :: !(Stats s)
     }
 
 -- | Create new solver
 newSolver :: ST s (Solver s)
 newSolver = do
-    ok        <- newSTRef True
-    nextLit   <- newSTRef 0
-    solution  <- newPartialAssignment >>= newSTRef
-    variables <- newVarSet >>= newSTRef
+    ok         <- newSTRef True
+    nextLit    <- newSTRef 0
+    solution   <- newPartialAssignment >>= newSTRef
+    variables  <- newVarSet >>= newSTRef
+    statistics <- newStats
 #ifdef TWO_WATCHED_LITERALS
-    clauses   <- newClauseDB 0 >>= newSTRef
+    clauses    <- newClauseDB 0 >>= newSTRef
 #else
-    clauses   <- newSTRef []
+    clauses    <- newSTRef []
 #endif
-    lcg       <- newLCG 44
+    lcg        <- newLCG 44
     return Solver {..}
 
 -- | Create fresh literal
@@ -509,6 +517,9 @@ data Self s = Self
       -- ^ sandbox used to construct conflict clause
 
     , trail :: {-# UNPACK #-} !(Trail s)
+      -- ^ solution trail
+    
+    , stats :: !(Stats s)
     }
 
 solve :: Solver s -> ST s Bool
@@ -522,6 +533,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
     trail    <- newTrail litCount
+    let stats = statistics
 
     TRACING(sizeofVarSet vars >>= \n -> traceM $ "vars to solve " ++ show n)
     TRACING(tracePartialAssignment pa)
@@ -535,6 +547,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 restart :: Self s -> Lit -> ST s Bool
 restart self@Self {..} l = do
     TRACING(traceM ("restart " ++ show l))
+    incrStatsRestarts stats
 
     unwind trail
 
@@ -707,6 +720,8 @@ traceCause sandbox = do
 
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
+    incrStatsConflicts stats
+
     let Trail size _ = trail
     TRACING(traceTrail reasons trail)
     clearLitSet sandbox
@@ -893,6 +908,27 @@ simplify _ = return True
 -- TODO: go through clauses:
 -- * filter out satisfied clauses
 -- * filter out the solved literals from remaining clauses
+
+-------------------------------------------------------------------------------
+-- statistics
+-------------------------------------------------------------------------------
+
+num_vars :: Solver s -> ST s Int
+num_vars Solver {..} = do
+    n <- readSTRef nextLit
+    return (unsafeShiftR n 1)
+
+num_clauses :: Solver s -> ST s Int
+num_clauses _ = return 0
+
+num_learnts :: Solver s -> ST s Int
+num_learnts _ = return 0
+
+num_conflicts :: Solver s -> ST s Int
+num_conflicts Solver {..} = readStatsConflicts statistics
+
+num_restarts :: Solver s -> ST s Int
+num_restarts Solver {..} = readStatsRestarts statistics
 
 -------------------------------------------------------------------------------
 -- queries

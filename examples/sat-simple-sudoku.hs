@@ -6,11 +6,9 @@
 --
 module Main (main) where
 
-import Control.Applicative    (liftA2)
-import Control.Monad          (when)
-import Control.Monad.IO.Class (liftIO)
-import Data.Foldable          (for_, toList, traverse_)
-import System.Exit (exitSuccess, exitFailure)
+import Control.Monad (when)
+import Data.Foldable (for_, toList, traverse_)
+import System.Exit   (exitFailure, exitSuccess)
 
 import Control.Monad.SAT
 
@@ -26,33 +24,35 @@ main = do
 
     putStrLn "Solving..."
     msol <- return $ runSATMaybe $ do
-        let stats = True
 
         m <- sudokuModel
         for_ m boostScore
         sudokuValues m initValues
         sudokuRules m
 
-        -- when stats $ do
-        --     numberOfVariables >>= \n -> liftIO $ putStrLn $ "variables: " ++ show n
-        --     numberOfClauses   >>= \n -> liftIO $ putStrLn $ "clauses:   " ++ show n
-
         simplify
-
-        -- when stats $ do
-        --     numberOfClauses   >>= \n -> liftIO $ putStrLn $ "clauses':  " ++ show n
 
         sol <- solve m
 
-        -- when stats $ do
-        --     numberOfLearnts   >>= \n -> liftIO $ putStrLn $ "learnts:   " ++ show n
-        --     numberOfConflicts >>= \n -> liftIO $ putStrLn $ "conflicts: " ++ show n
+        s1 <- numberOfVariables
+        s2 <- numberOfClauses
+        s3 <- numberOfLearnts
+        s4 <- numberOfConflicts
+        s5 <- numberOfRestarts
 
-        return sol
+        return (sol, (s1, s2, s3, s4, s5))
 
     case msol of
         Nothing -> putStrLn "No solution"
-        Just sol -> do
+        Just (sol, (s1, s2, s3, s4, s5)) -> do
+            let stats = True
+            when stats $ do
+                putStrLn $ "variables: " ++ show s1
+                putStrLn $ "clauses:   " ++ show s2
+                putStrLn $ "learnts:   " ++ show s3
+                putStrLn $ "conflicts: " ++ show s4
+                putStrLn $ "restarts:  " ++ show s5
+
             putStrLn "Solution:"
             let solution' = decode sol
             putStr $ render solution'
