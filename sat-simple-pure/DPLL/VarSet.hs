@@ -25,6 +25,9 @@ newtype VarSet s = VS (STRef s IS.IntSet)
 newVarSet :: ST s (VarSet s)
 newVarSet = VS <$> newSTRef IS.empty
 
+sizeofVarSet :: VarSet s -> ST s Int
+sizeofVarSet (VS xs) = IS.size <$> readSTRef xs
+
 extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet _ x = return x
 
@@ -52,6 +55,9 @@ minViewVarSet (VS xs) no yes = do
 #else
 
 newtype VarSet s = VS (SparseHeap s)
+
+sizeofVarSet :: VarSet s -> ST s Int
+sizeofVarSet (VS xs) = sizeofSparseHeap xs
 
 newVarSet :: ST s (VarSet s)
 newVarSet = VS <$> newSparseHeap 0

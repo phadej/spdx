@@ -70,6 +70,8 @@ import GHC.Stack
 #define ASSERTING(x)
 #endif
 
+import Debug.Trace
+
 -------------------------------------------------------------------------------
 -- Stats
 -------------------------------------------------------------------------------
@@ -487,6 +489,8 @@ solve :: Solver s -> ST s Bool
 solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     clauses' <- readSTRef clauses
     vars     <- readSTRef variables
+
+    TRACING(sizeofVarSet vars >>= \n -> traceM $ "vars to solve " ++ show n)
 
     litCount <- readSTRef nextLit
     units    <- newLitSet litCount
