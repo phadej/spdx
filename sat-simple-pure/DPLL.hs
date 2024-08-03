@@ -28,7 +28,7 @@ module DPLL (
 
 #define TWO_WATCHED_LITERALS
 
-import Control.Monad        (forM_)
+import Control.Monad        (forM_, when)
 import Control.Monad.ST     (ST)
 import Data.Bits            (testBit, unsafeShiftR)
 import Data.Functor         ((<&>))
@@ -38,7 +38,7 @@ import Data.Word            (Word8)
 
 import Data.Primitive.ByteArray
        (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
-       shrinkMutableByteArray, writeByteArray)
+       shrinkMutableByteArray, writeByteArray, fillByteArray, copyMutableByteArray)
 import Data.Primitive.PrimArray
        (indexPrimArray, primArrayFromList, sizeofPrimArray)
 import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray, newPrimArray)
@@ -80,11 +80,19 @@ import Debug.Trace
 
 newtype PartialAssignment s = PA (MutableByteArray s)
 
-newPartialAssignment :: ST s (PartialAssignment s)
-newPartialAssignment = do
-    arr <- newByteArray 4096
-    shrinkMutableByteArray arr 0
+newPartialAssignment :: Int -> ST s (PartialAssignment s)
+newPartialAssignment size = do
+    arr <- newByteArray (min 4096 size)
+    shrinkMutableByteArray arr size
+    fillByteArray arr 0 size 0xff
     return (PA arr)
+
+copyPartialAssignment :: PartialAssignment s -> PartialAssignment s -> ST s ()
+copyPartialAssignment (PA src) (PA tgt) = do
+    n <- getSizeofMutableByteArray src
+    m <- getSizeofMutableByteArray tgt
+    let size = min n m
+    copyMutableByteArray tgt 0 src 0 size
 
 extendPartialAssignment :: PartialAssignment s -> ST s (PartialAssignment s)
 extendPartialAssignment (PA arr) = do
@@ -347,7 +355,7 @@ newSolver :: ST s (Solver s)
 newSolver = do
     ok         <- newSTRef True
     nextLit    <- newSTRef 0
-    solution   <- newPartialAssignment >>= newSTRef
+    solution   <- newPartialAssignment 0 >>= newSTRef
     variables  <- newVarSet >>= newSTRef
     statistics <- newStats
 #ifdef TWO_WATCHED_LITERALS
@@ -504,6 +512,9 @@ data Self s = Self
     , pa       :: !(PartialAssignment s)
       -- ^ current partial assignment
 
+    , prev     :: !(PartialAssignment s)
+      -- ^ previous partial assignment
+
     , units    :: !(LitSet s)
       -- ^ unit literals to be processed
 
@@ -518,7 +529,7 @@ data Self s = Self
 
     , trail :: {-# UNPACK #-} !(Trail s)
       -- ^ solution trail
-    
+
     , stats :: !(Stats s)
     }
 
@@ -532,6 +543,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
+    prev     <- newPartialAssignment litCount
     trail    <- newTrail litCount
     let stats = statistics
 
@@ -548,6 +560,7 @@ restart :: Self s -> Lit -> ST s Bool
 restart self@Self {..} l = do
     TRACING(traceM ("restart " ++ show l))
     incrStatsRestarts stats
+    copyPartialAssignment pa prev
 
     unwind trail
 
@@ -621,10 +634,15 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
-        setLiteral2 self l
-        writeLitTable reasons l nullClause
-        pushTrail l trail
-        unitPropagate self l
+        l' <- lookupPartialAssignment l prev <&> \case
+            LTrue  -> neg l
+            LFalse -> l
+            LUndef -> l
+
+        setLiteral2 self l'
+        writeLitTable reasons l' nullClause
+        pushTrail l' trail
+        unitPropagate self l'
       where
         !l = varToLit v
 
@@ -788,7 +806,13 @@ backtrack self@Self {..} !cause = do
                 then do
                     TRACING(traceM ("decided flip " ++ show l))
                     conflictCause <- litSetToClause sandbox
+                    let conflictSize = sizeofClause2 conflictCause
+                    TRACING(traceM $ "conflict size " ++ show conflictSize)
                     ASSERTING(assertClauseConflicting pa conflictCause)
+
+                    when (conflictSize < 4) $ do
+                        incrStatsLearnt stats
+                        -- TODO: implement learning
 
                     -- TODO: toggleLiteral self pa
                     deletePartialAssignment l pa
@@ -922,7 +946,7 @@ num_clauses :: Solver s -> ST s Int
 num_clauses _ = return 0
 
 num_learnts :: Solver s -> ST s Int
-num_learnts _ = return 0
+num_learnts Solver {..} = readStatsLearnt statistics
 
 num_conflicts :: Solver s -> ST s Int
 num_conflicts Solver {..} = readStatsConflicts statistics

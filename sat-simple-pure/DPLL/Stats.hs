@@ -3,6 +3,7 @@ module DPLL.Stats (
     newStats,
     readStatsConflicts, incrStatsConflicts,
     readStatsRestarts, incrStatsRestarts,
+    readStatsLearnt, incrStatsLearnt,
 ) where
 
 import Control.Monad.ST (ST)
@@ -27,6 +28,10 @@ incrStatsConflicts :: Stats s -> ST s ()
 readStatsRestarts :: Stats s -> ST s Int
 incrStatsRestarts :: Stats s -> ST s ()
 (readStatsRestarts, incrStatsRestarts) = makeStat 1
+
+readStatsLearnt :: Stats s -> ST s Int
+incrStatsLearnt :: Stats s -> ST s ()
+(readStatsLearnt, incrStatsLearnt) = makeStat 2
 
 makeStat :: Int -> (Stats s1 -> ST s1 Int, Stats s2 -> ST s2 ())
 makeStat i = (read_, incr_)
