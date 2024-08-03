@@ -212,6 +212,10 @@ clearClauseDB (CDB cdb) l = do
 
 type ClauseDB s = [Clause2]
 
+-- TODO: this is used in learning code.
+insertClauseDB :: Lit -> Lit -> Clause2 -> ClauseDB s -> ST s ()
+insertClauseDB _ _ _ _ = return ()
+
 #endif
 
 -------------------------------------------------------------------------------
@@ -398,8 +402,9 @@ boost !n
     | otherwise = n + 1
 {-# INLINE [1] boost #-}
 
-_decay :: Int -> Int
-_decay n = unsafeShiftR n 1
+-- decay :: Int -> Int
+-- decay n = unsafeShiftR n 1
+-- {-# INLINE [1] decay #-}
 
 boostScore :: Solver s -> Lit -> ST s ()
 boostScore Solver {..} l = do
@@ -414,6 +419,8 @@ addClause solver@Solver {..} clause = whenOk ok $ do
             Satisfied    -> return True
             Conflicting  -> unsat solver
             Unresolved !c -> do
+                incrStatsClauses statistics
+
                 clauseDB <- readSTRef clauses
 #ifdef TWO_WATCHED_LITERALS
                 let MkClause2 l1 l2 _ = c
@@ -745,17 +752,17 @@ backtrack self@Self {..} !cause = do
     clearLitSet sandbox
     forLitInClause2_ cause insertSandbox
     TRACING(traceCause sandbox)
-    go size
+    go False size
    where
     insertSandbox :: Lit -> ST s ()
     insertSandbox !l = insertLitSet l sandbox
     {-# INLINE [1] insertSandbox #-}
 
-    go :: PrimVar s Int -> ST s Bool
-    go size = do
+    go :: Bool -> PrimVar s Int -> ST s Bool
+    go notFirst size = do
         n <- readPrimVar size
         if n <= 0
-        then return False
+        then return False -- end of the trail
         else do
             l <- popTrail trail
             c <- readLitTable reasons l
@@ -776,24 +783,31 @@ backtrack self@Self {..} !cause = do
                     forLitInClause2_ c insertSandbox
                     deleteLitSet l       sandbox
                     deleteLitSet (neg l) sandbox
-        {-
-                conflictCause <- litSetToClause sandbox
-                satisfied2_ pa conflictCause $ \case
-                    Conflicting_ -> return ()
-                    ot           -> assertST (show ot) False
-        -}
+
+                    -- TODO: assertConflict
+                    -- satisfied2_ pa conflictCause $ \case
+                    --     Conflicting_ -> return ()
+                    --     ot           -> assertST (show ot) False
 
                     TRACING(traceCause sandbox)
-                    sizeofLitSet sandbox >>= \case
+                    conflictSize <- sizeofLitSet sandbox
+                    case conflictSize of
                         1 -> unsingletonLitSet sandbox >>= \l' -> restart self l'
-                        _ -> go size
+                        _ -> do
+                            -- TODO: add when 2WL has specific support for binary clauses
+                            -- when (notFirst && conflictSize == 2) $ do
+                            --     incrStatsLearnt stats
+                            --     conflictCause <- litSetToClause sandbox
+                            --     case conflictCause of
+                            --         MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
+                            go True size
 
                 else do
-                    -- assertConflict
+                    -- TODO: assertConflict
                     TRACING(traceM ("deduced skip " ++ show l))
                     ASSERTING(conflictCause <- litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
-                    go size
+                    go True size
 
             else do
                 TRACING(traceM ("backtrack decide " ++ show l))
@@ -810,9 +824,12 @@ backtrack self@Self {..} !cause = do
                     TRACING(traceM $ "conflict size " ++ show conflictSize)
                     ASSERTING(assertClauseConflicting pa conflictCause)
 
-                    when (conflictSize < 4) $ do
+                    -- learning: when the conflict clause is binary clause
+                    -- we don't need to worry where to insert the clause in 2WL setup
+                    when (notFirst && conflictSize == 2) $ do
                         incrStatsLearnt stats
-                        -- TODO: implement learning
+                        case conflictCause of
+                            MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
 
                     -- TODO: toggleLiteral self pa
                     deletePartialAssignment l pa
@@ -841,7 +858,7 @@ backtrack self@Self {..} !cause = do
                     ASSERTING(conflictCause <- litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
 
-                    go size
+                    go True size
 
 -------------------------------------------------------------------------------
 -- initial loop
@@ -943,7 +960,7 @@ num_vars Solver {..} = do
     return (unsafeShiftR n 1)
 
 num_clauses :: Solver s -> ST s Int
-num_clauses _ = return 0
+num_clauses Solver {..} = readStatsClauses statistics
 
 num_learnts :: Solver s -> ST s Int
 num_learnts Solver {..} = readStatsLearnt statistics
