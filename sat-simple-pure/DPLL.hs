@@ -28,7 +28,7 @@ module DPLL (
 
 #define TWO_WATCHED_LITERALS
 
-import Control.Monad        (forM_)
+import Control.Monad        (forM_, when)
 import Control.Monad.ST     (ST)
 import Data.Bits            (testBit, unsafeShiftR)
 import Data.Functor         ((<&>))
@@ -38,7 +38,7 @@ import Data.Word            (Word8)
 
 import Data.Primitive.ByteArray
        (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
-       shrinkMutableByteArray, writeByteArray)
+       shrinkMutableByteArray, writeByteArray, fillByteArray, copyMutableByteArray)
 import Data.Primitive.PrimArray
        (indexPrimArray, primArrayFromList, sizeofPrimArray)
 import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray, newPrimArray)
@@ -80,11 +80,19 @@ import Debug.Trace
 
 newtype PartialAssignment s = PA (MutableByteArray s)
 
-newPartialAssignment :: ST s (PartialAssignment s)
-newPartialAssignment = do
-    arr <- newByteArray 4096
-    shrinkMutableByteArray arr 0
+newPartialAssignment :: Int -> ST s (PartialAssignment s)
+newPartialAssignment size = do
+    arr <- newByteArray (min 4096 size)
+    shrinkMutableByteArray arr size
+    fillByteArray arr 0 size 0xff
     return (PA arr)
+
+copyPartialAssignment :: PartialAssignment s -> PartialAssignment s -> ST s ()
+copyPartialAssignment (PA src) (PA tgt) = do
+    n <- getSizeofMutableByteArray src
+    m <- getSizeofMutableByteArray tgt
+    let size = min n m
+    copyMutableByteArray tgt 0 src 0 size
 
 extendPartialAssignment :: PartialAssignment s -> ST s (PartialAssignment s)
 extendPartialAssignment (PA arr) = do
@@ -105,6 +113,7 @@ lookupPartialAssignment (MkLit l) (PA arr) = do
 
 insertPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
 insertPartialAssignment (MkLit l) (PA arr) = do
+    ASSERTING(readByteArray arr (lit_to_var l) >>= \x -> assertST "insert" (x == (0xff :: Word8)))
     writeByteArray arr (lit_to_var l) (if testBit l 0 then 0x1 else 0x0 :: Word8)
 
 deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
@@ -203,6 +212,10 @@ clearClauseDB (CDB cdb) l = do
 #else
 
 type ClauseDB s = [Clause2]
+
+-- TODO: this is used in learning code.
+insertClauseDB :: Lit -> Lit -> Clause2 -> ClauseDB s -> ST s ()
+insertClauseDB _ _ _ _ = return ()
 
 #endif
 
@@ -347,7 +360,7 @@ newSolver :: ST s (Solver s)
 newSolver = do
     ok         <- newSTRef True
     nextLit    <- newSTRef 0
-    solution   <- newPartialAssignment >>= newSTRef
+    solution   <- newPartialAssignment 0 >>= newSTRef
     variables  <- newVarSet >>= newSTRef
     statistics <- newStats
 #ifdef TWO_WATCHED_LITERALS
@@ -390,8 +403,9 @@ boost !n
     | otherwise = n + 1
 {-# INLINE [1] boost #-}
 
-_decay :: Int -> Int
-_decay n = unsafeShiftR n 1
+-- decay :: Int -> Int
+-- decay n = unsafeShiftR n 1
+-- {-# INLINE [1] decay #-}
 
 boostScore :: Solver s -> Lit -> ST s ()
 boostScore Solver {..} l = do
@@ -406,6 +420,8 @@ addClause solver@Solver {..} clause = whenOk ok $ do
             Satisfied    -> return True
             Conflicting  -> unsat solver
             Unresolved !c -> do
+                incrStatsClauses statistics
+
                 clauseDB <- readSTRef clauses
 #ifdef TWO_WATCHED_LITERALS
                 let MkClause2 l1 l2 _ = c
@@ -504,6 +520,9 @@ data Self s = Self
     , pa       :: !(PartialAssignment s)
       -- ^ current partial assignment
 
+    , prev     :: !(PartialAssignment s)
+      -- ^ previous partial assignment
+
     , units    :: !(LitSet s)
       -- ^ unit literals to be processed
 
@@ -518,7 +537,7 @@ data Self s = Self
 
     , trail :: {-# UNPACK #-} !(Trail s)
       -- ^ solution trail
-    
+
     , stats :: !(Stats s)
     }
 
@@ -532,6 +551,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
+    prev     <- newPartialAssignment litCount
     trail    <- newTrail litCount
     let stats = statistics
 
@@ -548,6 +568,7 @@ restart :: Self s -> Lit -> ST s Bool
 restart self@Self {..} l = do
     TRACING(traceM ("restart " ++ show l))
     incrStatsRestarts stats
+    copyPartialAssignment pa prev
 
     unwind trail
 
@@ -621,10 +642,15 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
-        setLiteral2 self l
-        writeLitTable reasons l nullClause
-        pushTrail l trail
-        unitPropagate self l
+        l' <- lookupPartialAssignment l prev <&> \case
+            LTrue  -> neg l
+            LFalse -> l
+            LUndef -> l
+
+        setLiteral2 self l'
+        writeLitTable reasons l' nullClause
+        pushTrail l' trail
+        unitPropagate self l'
       where
         !l = varToLit v
 
@@ -668,7 +694,26 @@ unitPropagate self@Self {..} !l  = do
                     Unit_ u           -> do
                         writeVec watches j w
                         foundUnitClause self u c
-                        go watches (i + 1) (j + 1) size
+
+                        isNeg <- memberLitSet units (neg u)
+                        -- for now this is pessimisation,
+                        -- as we don't learn from these conflicts.
+                        -- (enabling it increases the conflicts)
+                        if isNeg && False
+                        then do
+                            -- c1 <- readLitTable reasons u
+                            -- c2 <- readLitTable reasons (neg u)
+                            -- traceM $ "there is neg: " ++ show (l, u, c, c1, c2)
+
+                            copy watches (i + 1) (j + 1) size
+
+                            insertPartialAssignment (neg u) pa
+                            deleteVarSet (litToVar u) vars
+                            pushTrail (neg u) trail
+
+                            backtrack self c
+                        else do
+                            go watches (i + 1) (j + 1) size
 
                     Unresolved_ l1 l2
                         | l2 /= l', l2 /= l
@@ -727,17 +772,17 @@ backtrack self@Self {..} !cause = do
     clearLitSet sandbox
     forLitInClause2_ cause insertSandbox
     TRACING(traceCause sandbox)
-    go size
+    go False size
    where
     insertSandbox :: Lit -> ST s ()
     insertSandbox !l = insertLitSet l sandbox
     {-# INLINE [1] insertSandbox #-}
 
-    go :: PrimVar s Int -> ST s Bool
-    go size = do
+    go :: Bool -> PrimVar s Int -> ST s Bool
+    go notFirst size = do
         n <- readPrimVar size
         if n <= 0
-        then return False
+        then return False -- end of the trail
         else do
             l <- popTrail trail
             c <- readLitTable reasons l
@@ -758,24 +803,31 @@ backtrack self@Self {..} !cause = do
                     forLitInClause2_ c insertSandbox
                     deleteLitSet l       sandbox
                     deleteLitSet (neg l) sandbox
-        {-
-                conflictCause <- litSetToClause sandbox
-                satisfied2_ pa conflictCause $ \case
-                    Conflicting_ -> return ()
-                    ot           -> assertST (show ot) False
-        -}
+
+                    -- TODO: assertConflict
+                    -- satisfied2_ pa conflictCause $ \case
+                    --     Conflicting_ -> return ()
+                    --     ot           -> assertST (show ot) False
 
                     TRACING(traceCause sandbox)
-                    sizeofLitSet sandbox >>= \case
+                    conflictSize <- sizeofLitSet sandbox
+                    case conflictSize of
                         1 -> unsingletonLitSet sandbox >>= \l' -> restart self l'
-                        _ -> go size
+                        _ -> do
+                            -- TODO: add when 2WL has specific support for binary clauses
+                            -- when (notFirst && conflictSize == 2) $ do
+                            --     incrStatsLearnt stats
+                            --     conflictCause <- litSetToClause sandbox
+                            --     case conflictCause of
+                            --         MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
+                            go True size
 
                 else do
-                    -- assertConflict
+                    -- TODO: assertConflict
                     TRACING(traceM ("deduced skip " ++ show l))
                     ASSERTING(conflictCause <- litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
-                    go size
+                    go True size
 
             else do
                 TRACING(traceM ("backtrack decide " ++ show l))
@@ -788,7 +840,16 @@ backtrack self@Self {..} !cause = do
                 then do
                     TRACING(traceM ("decided flip " ++ show l))
                     conflictCause <- litSetToClause sandbox
+                    let conflictSize = sizeofClause2 conflictCause
+                    TRACING(traceM $ "conflict size " ++ show conflictSize)
                     ASSERTING(assertClauseConflicting pa conflictCause)
+
+                    -- learning: when the conflict clause is binary clause
+                    -- we don't need to worry where to insert the clause in 2WL setup
+                    when (notFirst && conflictSize == 2) $ do
+                        incrStatsLearnt stats
+                        case conflictCause of
+                            MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
 
                     -- TODO: toggleLiteral self pa
                     deletePartialAssignment l pa
@@ -817,7 +878,7 @@ backtrack self@Self {..} !cause = do
                     ASSERTING(conflictCause <- litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
 
-                    go size
+                    go True size
 
 -------------------------------------------------------------------------------
 -- initial loop
@@ -919,10 +980,10 @@ num_vars Solver {..} = do
     return (unsafeShiftR n 1)
 
 num_clauses :: Solver s -> ST s Int
-num_clauses _ = return 0
+num_clauses Solver {..} = readStatsClauses statistics
 
 num_learnts :: Solver s -> ST s Int
-num_learnts _ = return 0
+num_learnts Solver {..} = readStatsLearnt statistics
 
 num_conflicts :: Solver s -> ST s Int
 num_conflicts Solver {..} = readStatsConflicts statistics

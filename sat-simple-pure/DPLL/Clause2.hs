@@ -29,3 +29,6 @@ nullClause = MkClause2 (MkLit 1) (MkLit 1) emptyPrimArray
 
 isNullClause :: Clause2 -> Bool
 isNullClause (MkClause2 l1 l2 _) = l1 == l2
+
+sizeofClause2 :: Clause2 -> Int
+sizeofClause2 (MkClause2 _ _ ls) = sizeofPrimArray ls + 2
