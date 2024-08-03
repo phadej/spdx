@@ -368,6 +368,7 @@ boost :: Int -> Int
 boost !n
     | n <= 0    = 1
     | otherwise = n + 1
+{-# INLINE [1] boost #-}
 
 _decay :: Int -> Int
 _decay n = unsafeShiftR n 1
@@ -501,19 +502,6 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     forM_ clauses' $ \c@(MkClause2 a b d) ->
         let kontSolve = \case
                 Unresolved_ l1 l2 -> do
-                    if sizeofPrimArray d == 0
-                    then do
-                        weightVarSet (litToVar a) (boost . boost . boost) vars
-                        weightVarSet (litToVar b) (boost . boost . boost) vars
-                    else if sizeofPrimArray d <= 2 then do
-                        weightVarSet (litToVar a) (boost . boost) vars
-                        weightVarSet (litToVar b) (boost . boost) vars
-                        traversePrimArray_ (\l -> weightVarSet (litToVar l) (boost . boost) vars) d
-                    else do
-                        weightVarSet (litToVar a) boost vars
-                        weightVarSet (litToVar b) boost vars
-                        traversePrimArray_ (\l -> weightVarSet (litToVar l) boost vars) d
-
                     insertClauseDB l1 l2 c clauseDB
                 _                 -> error "PANIC! not simplified DB"
             {-# INLINE [1] kontSolve #-}
@@ -781,8 +769,9 @@ backtrack self@Self {..} !cause = do
                     clearLitSet units
 
                     -- boost literals
-                    forLitInClause2_ conflictCause $ \cl ->
-                        weightVarSet (litToVar cl) boost vars
+                    let boost' cl = weightVarSet (litToVar cl) boost vars
+                        {-# INLINE [1] boost' #-}
+                    forLitInClause2_ conflictCause boost'
 
                     writeLitTable reasons (neg l) conflictCause
                     pushTrail (neg l) trail
