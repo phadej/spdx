@@ -23,11 +23,9 @@ module DPLL (
 #define TWO_WATCHED_LITERALS
 
 import Control.Monad.ST     (ST)
-import Data.Bits            (complementBit, testBit, unsafeShiftL, unsafeShiftR)
-import Data.Coerce          (coerce)
+import Data.Bits            (testBit, unsafeShiftR)
 import Data.Functor         ((<&>))
 import Data.List            (nub)
-import Data.Primitive.Types (Prim)
 import Data.STRef           (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word            (Word8)
 
@@ -45,7 +43,6 @@ import Assert
 #endif
 
 import LCG
-import SparseSet
 import DPLL.LBool
 import DPLL.LitVar
 import DPLL.LitSet
@@ -54,25 +51,20 @@ import DPLL.LitTable
 import DPLL.Clause2
 
 import Control.Monad            (forM_)
-import Data.Primitive.Array     (MutableArray, newArray, readArray, writeArray)
-import Data.Primitive.PrimArray (traversePrimArray_)
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
 #endif
 
-import Unsafe.Coerce (unsafeCoerce)
-
-import Debug.Trace
-import GHC.Stack
-
 #ifdef ENABLE_TRACE
+import Debug.Trace
 #define TRACING(x) x
 #else
 #define TRACING(x)
 #endif
 
 #ifdef ENABLE_ASSERTS
+import GHC.Stack
 #define ASSERTING(x) x
 #else
 #define ASSERTING(x)
@@ -121,6 +113,7 @@ deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
 deletePartialAssignment (MkLit l) (PA arr) = do
     writeByteArray arr (lit_to_var l) (0xff :: Word8)
 
+#ifdef ENABLE_TRACE
 tracePartialAssignment :: PartialAssignment s -> ST s ()
 tracePartialAssignment (PA arr) = do
     n <- getSizeofMutableByteArray arr
@@ -137,6 +130,7 @@ tracePartialAssignment (PA arr) = do
 
         | otherwise
         = return (reverse acc)
+#endif
 
 #ifdef ENABLE_ASSERTS
 assertLiteralInPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
@@ -430,6 +424,7 @@ pushTrail l (Trail size ls) = do
     writePrimVar size (n + 1)
     writePrimArray ls n l
 
+#ifdef ENABLE_TRACE
 traceTrail :: forall s. LitTable s Clause2 -> Trail s -> ST s ()
 traceTrail reasons (Trail size ls) = do
     n <- readPrimVar size
@@ -449,12 +444,15 @@ traceTrail reasons (Trail size ls) = do
             if isNullClause c
             then return ((showString "Decided " . showsPrec 11 l) "" : ls)
             else return ((showString "Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
+#endif
 
+#ifdef ENABLE_ASSERTS
 assertEmptyTrail :: HasCallStack => Trail s -> ST s ()
 assertEmptyTrail (Trail size _) = do
     n <- readPrimVar size
     ASSERTING (assertST "n == 0" $ n == 0)
     return ()
+#endif
 
 -------------------------------------------------------------------------------
 -- Solving
@@ -499,7 +497,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB <- newClauseDB litCount
-    forM_ clauses' $ \c@(MkClause2 a b d) ->
+    forM_ clauses' $ \ !c ->
         let kontSolve = \case
                 Unresolved_ l1 l2 -> do
                     insertClauseDB l1 l2 c clauseDB
@@ -683,10 +681,12 @@ unitPropagate self@Self {..} _l trail = go clauseDB
         Unresolved_ _ _ -> go cs
 #endif
 
+#ifdef ENABLE_TRACE
 traceCause :: LitSet s -> ST s ()
 traceCause sandbox = do
     xs <- elemsLitSet sandbox
     traceM $ "current cause " ++ show xs
+#endif
 
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
@@ -699,7 +699,7 @@ backtrack self@Self {..} !cause = do
     go size
    where
     insertSandbox :: Lit -> ST s ()
-    insertSandbox l = insertLitSet l sandbox
+    insertSandbox !l = insertLitSet l sandbox
     {-# INLINE [1] insertSandbox #-}
 
     go :: PrimVar s Int -> ST s Bool
@@ -769,7 +769,7 @@ backtrack self@Self {..} !cause = do
                     clearLitSet units
 
                     -- boost literals
-                    let boost' cl = weightVarSet (litToVar cl) boost vars
+                    let boost' !cl = weightVarSet (litToVar cl) boost vars
                         {-# INLINE [1] boost' #-}
                     forLitInClause2_ conflictCause boost'
 
