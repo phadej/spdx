@@ -113,6 +113,7 @@ lookupPartialAssignment (MkLit l) (PA arr) = do
 
 insertPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
 insertPartialAssignment (MkLit l) (PA arr) = do
+    ASSERTING(readByteArray arr (lit_to_var l) >>= \x -> assertST "insert" (x == (0xff :: Word8)))
     writeByteArray arr (lit_to_var l) (if testBit l 0 then 0x1 else 0x0 :: Word8)
 
 deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
@@ -693,7 +694,26 @@ unitPropagate self@Self {..} !l  = do
                     Unit_ u           -> do
                         writeVec watches j w
                         foundUnitClause self u c
-                        go watches (i + 1) (j + 1) size
+
+                        isNeg <- memberLitSet units (neg u)
+                        -- for now this is pessimisation,
+                        -- as we don't learn from these conflicts.
+                        -- (enabling it increases the conflicts)
+                        if isNeg && False
+                        then do
+                            -- c1 <- readLitTable reasons u
+                            -- c2 <- readLitTable reasons (neg u)
+                            -- traceM $ "there is neg: " ++ show (l, u, c, c1, c2)
+
+                            copy watches (i + 1) (j + 1) size
+
+                            insertPartialAssignment (neg u) pa
+                            deleteVarSet (litToVar u) vars
+                            pushTrail (neg u) trail
+
+                            backtrack self c
+                        else do
+                            go watches (i + 1) (j + 1) size
 
                     Unresolved_ l1 l2
                         | l2 /= l', l2 /= l
