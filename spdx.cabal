@@ -69,6 +69,7 @@ library sat-simple-pure
     DPLL.LitSet
     DPLL.LitTable
     DPLL.LitVar
+    DPLL.Stats
     DPLL.VarSet
     EST
     LCG
