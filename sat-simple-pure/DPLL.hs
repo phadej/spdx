@@ -22,6 +22,7 @@ module DPLL (
 
 #define TWO_WATCHED_LITERALS
 
+import Control.Monad        (forM_)
 import Control.Monad.ST     (ST)
 import Data.Bits            (testBit, unsafeShiftR)
 import Data.Functor         ((<&>))
@@ -45,7 +46,6 @@ import DPLL.VarSet
 import DPLL.LitTable
 import DPLL.Clause2
 
-import Control.Monad            (forM_)
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
@@ -133,12 +133,6 @@ assertLiteralInPartialAssignment l pa =
 #endif
 
 -------------------------------------------------------------------------------
--- Clauses
--------------------------------------------------------------------------------
-
-type Clauses = [Clause2]
-
--------------------------------------------------------------------------------
 -- ClauseDB
 -------------------------------------------------------------------------------
 
@@ -149,7 +143,8 @@ newtype ClauseDB s = CDB (LitTable s (Vec s Watch))
 data Watch = W !Lit !Clause2
 
 newClauseDB :: Int -> ST s (ClauseDB s)
-newClauseDB !size = do
+newClauseDB !size' = do
+    let size = max size' 4096
     arr <- newLitTable size undefined
 
     forM_ [0 .. size - 1] $ \i -> do
@@ -157,6 +152,27 @@ newClauseDB !size = do
         writeLitTable arr (MkLit i) vec
 
     return (CDB arr)
+
+extendClauseDB :: ClauseDB s -> Int -> ST s (ClauseDB s)
+extendClauseDB cdb@(CDB old) newSize' = do
+    -- TODO: this code is terrible.
+    oldSize <- sizeofLitTable old
+    let newSize = max newSize' 4096
+    if newSize <= oldSize
+    then return cdb
+    else do
+        new <- newLitTable newSize undefined
+
+        forM_ [0 .. newSize - 1] $ \i -> do
+            if i < oldSize
+            then do
+                x <- readLitTable old (MkLit i)
+                writeLitTable new (MkLit i) x
+            else do
+                vec <- newVec 16
+                writeLitTable new (MkLit i) vec
+
+        return (CDB new)
 
 insertClauseDB :: Lit -> Lit -> Clause2 -> ClauseDB s -> ST s ()
 insertClauseDB !l1 !l2 !clause !cdb = do
@@ -312,10 +328,10 @@ assertClauseSatisfied pa c =
 -- | Solver
 data Solver s = Solver
     { ok        :: !(STRef s Bool)
-    , nextLit   :: !(STRef s Int)
+    , nextLit   :: !(STRef s Int) -- TODO: change to PrimVar
     , solution  :: !(STRef s (PartialAssignment s))
     , variables :: !(STRef s (VarSet s))
-    , clauses   :: !(STRef s Clauses)
+    , clauses   :: !(STRef s (ClauseDB s))
     , lcg       :: !(LCG s)
     }
 
@@ -326,7 +342,11 @@ newSolver = do
     nextLit   <- newSTRef 0
     solution  <- newPartialAssignment >>= newSTRef
     variables <- newVarSet >>= newSTRef
+#ifdef TWO_WATCHED_LITERALS
+    clauses   <- newClauseDB 0 >>= newSTRef
+#else
     clauses   <- newSTRef []
+#endif
     lcg       <- newLCG 44
     return Solver {..}
 
@@ -345,6 +365,12 @@ newLit Solver {..} = do
     vars <- readSTRef variables
     vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
     writeSTRef variables vars'
+
+#ifdef TWO_WATCHED_LITERALS
+    clauseDB  <- readSTRef clauses
+    clauseDB' <- extendClauseDB clauseDB (l' + 2)
+    writeSTRef clauses clauseDB'
+#endif
 
     insertVarSet (litToVar l) vars'
 
@@ -365,29 +391,42 @@ boostScore Solver {..} l = do
     weightVarSet (litToVar l) (boost . boost . boost) vars
 
 addClause :: Solver s -> [Lit] -> ST s Bool
-addClause solver@Solver {..} clause = do
-    ok' <- readSTRef ok
-    if ok'
-    then do
+addClause solver@Solver {..} clause = whenOk ok $ do
         pa <- readSTRef solution
         s <- satisfied pa clause
         case s of
             Satisfied    -> return True
             Conflicting  -> unsat solver
-            Unresolved c -> do
-                clauses' <- readSTRef clauses
-                writeSTRef clauses (c : clauses')
+            Unresolved !c -> do
+                clauseDB <- readSTRef clauses
+#ifdef TWO_WATCHED_LITERALS
+                let MkClause2 l1 l2 _ = c
+                insertClauseDB l1 l2 c clauseDB
+#else
+                writeSTRef clauses (c : clauseDB)
+#endif
+
                 return True
+
             Unit l -> do
-                insertPartialAssignment l pa
-                readSTRef variables >>= deleteVarSet (litToVar l)
-                return True
-    else return False
+                TRACING(traceM $ "addClause unit: " ++ show l)
+
+                litCount <- readSTRef nextLit
+                clauseDB <- readSTRef clauses
+                vars <- readSTRef variables
+                units <- newLitSet litCount
+                insertLitSet l units
+
+                res <- initialLoop clauseDB units vars pa
+                if res
+                then return True
+                else unsat solver
 
 unsat :: Solver s -> ST s Bool
 unsat Solver {..} = do
     writeSTRef ok False
-    writeSTRef clauses []
+    -- TODO: cleanup clauses
+    -- writeSTRef clauses []
     readSTRef variables >>= clearVarSet
     return False
 
@@ -451,11 +490,8 @@ assertEmptyTrail (Trail size _) = do
 -------------------------------------------------------------------------------
 
 data Self s = Self
-    { clauses_ :: ![Clause2]
-      -- ^ original clauses
-
-    , clauseDB :: !(ClauseDB s)
-      -- ^ clause database actually used for BCP
+    { clauseDB :: !(ClauseDB s)
+      -- ^ clause database
 
     , pa       :: !(PartialAssignment s)
       -- ^ current partial assignment
@@ -477,10 +513,8 @@ data Self s = Self
 
 solve :: Solver s -> ST s Bool
 solve solver@Solver {..} = whenOk_ (simplify solver) $ do
-    clauses' <- readSTRef clauses
+    clauseDB <- readSTRef clauses
     vars     <- readSTRef variables
-
-    TRACING(sizeofVarSet vars >>= \n -> traceM $ "vars to solve " ++ show n)
 
     litCount <- readSTRef nextLit
     units    <- newLitSet litCount
@@ -489,21 +523,10 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     pa       <- readSTRef solution
     trail    <- newTrail litCount
 
-#ifdef TWO_WATCHED_LITERALS
-    clauseDB <- newClauseDB litCount
-    forM_ clauses' $ \ !c ->
-        let kontSolve = \case
-                Unresolved_ l1 l2 -> do
-                    insertClauseDB l1 l2 c clauseDB
-                _                 -> error "PANIC! not simplified DB"
-            {-# INLINE [1] kontSolve #-}
-        in satisfied2_ pa c kontSolve
-#else
-    let clauseDB = clauses'
-#endif
+    TRACING(sizeofVarSet vars >>= \n -> traceM $ "vars to solve " ++ show n)
+    TRACING(tracePartialAssignment pa)
 
-    let clauses_ = clauses'
-    let self     = Self {..}
+    let self = Self {..}
 
     solveLoop self >>= \case
         False -> unsat solver
@@ -518,6 +541,7 @@ restart self@Self {..} l = do
     clearLitSet units
     insertLitSet l units
     res <- initialLoop clauseDB units vars pa
+    TRACING(traceM ("restart propagation result: " ++ show res))
 
     ASSERTING(assertEmptyTrail trail)
     if res
@@ -534,6 +558,7 @@ restart self@Self {..} l = do
             | otherwise = do
                 l' <- readPrimArray ls i
                 unsetLiteral self l'
+                go (i + 1) n
 
 setLiteral1 :: Self s -> Lit -> ST s ()
 setLiteral1 Self {..} l = do
@@ -563,7 +588,7 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
         LUndef -> do
             setLiteral1 self l
             pushTrail l trail
-            c <- readLitTable reasons l
+            ASSERTING(c <- readLitTable reasons l)
             ASSERTING(assertST "reason is not null" (not (isNullClause c)))
             unitPropagate self l
 
@@ -583,8 +608,6 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
-        TRACING(traceM ("loop: decide var " ++ show l))
-
         setLiteral2 self l
         writeLitTable reasons l nullClause
         pushTrail l trail
@@ -685,7 +708,6 @@ traceCause sandbox = do
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
     let Trail size _ = trail
-    TRACING(traceM ("backtrack reason " ++ show cause))
     TRACING(traceTrail reasons trail)
     clearLitSet sandbox
     forLitInClause2_ cause insertSandbox
@@ -806,9 +828,10 @@ initialUnitPropagate clauseDB units vars pa l = do
     let _unused = l
     TRACING(traceM ("initialUnitPropagate " ++ show l))
 #ifdef TWO_WATCHED_LITERALS
-    clearClauseDB clauseDB l
+    clearClauseDB clauseDB l -- clear literal clauses: they are always true.
     watches <- lookupClauseDB (neg l) clauseDB
     size <- sizeofVec watches
+    TRACING(traceM ("initialUnitPropagate watches: " ++ show size))
     go watches 0 0 size
   where
     go :: Vec s Watch -> Int -> Int -> Int -> ST s Bool
@@ -866,31 +889,10 @@ initialUnitPropagate clauseDB units vars pa l = do
 
 -- | Simplify solver
 simplify :: Solver s -> ST s Bool
-simplify solver@Solver {..} = whenOk ok $ do
-    clauses0 <- readSTRef clauses
-    vars     <- readSTRef variables
-    pa       <- readSTRef solution
-
-    simplifyLoop [] pa clauses0 vars >>= \case
-        Nothing -> unsat solver
-        Just clauses1 -> do
-            writeSTRef clauses clauses1
-            -- traceM $ "simplify " ++ show (length pa0, length pa1, IntSet.size vars0, IntSet.size vars1)
-            return True
-
-simplifyLoop :: [Clause2] -> PartialAssignment s -> [Clause2] -> VarSet s -> ST s (Maybe [Clause2])
-simplifyLoop !acc !_  []     !_vars = return (Just acc)
-simplifyLoop  acc  pa (c:cs)   vars = satisfied2_ pa c kontSimplify
-  where
-    {-# INLINE [1] kontSimplify #-}
-    kontSimplify = \case
-        Conflicting_    -> return Nothing
-        Satisfied_      -> simplifyLoop acc     pa cs vars
-        Unresolved_ _ _ -> simplifyLoop (c:acc) pa cs vars
-        Unit_ l         -> do
-            insertPartialAssignment l pa
-            deleteVarSet (litToVar l) vars
-            simplifyLoop [] pa (acc ++ cs) vars
+simplify _ = return True
+-- TODO: go through clauses:
+-- * filter out satisfied clauses
+-- * filter out the solved literals from remaining clauses
 
 -------------------------------------------------------------------------------
 -- queries
