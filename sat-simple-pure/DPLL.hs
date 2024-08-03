@@ -365,7 +365,7 @@ newLit Solver {..} = do
     return l
 
 boost :: Int -> Int
-boost n
+boost !n
     | n <= 0    = 1
     | otherwise = n + 1
 
@@ -706,10 +706,14 @@ backtrack self@Self {..} !cause = do
     TRACING(traceM ("backtrack reason " ++ show cause))
     TRACING(traceTrail reasons trail)
     clearLitSet sandbox
-    forLitInClause2_ cause $ \l -> insertLitSet l sandbox
+    forLitInClause2_ cause insertSandbox
     TRACING(traceCause sandbox)
     go size
-  where
+   where
+    insertSandbox :: Lit -> ST s ()
+    insertSandbox l = insertLitSet l sandbox
+    {-# INLINE [1] insertSandbox #-}
+
     go :: PrimVar s Int -> ST s Bool
     go size = do
         n <- readPrimVar size
@@ -732,7 +736,7 @@ backtrack self@Self {..} !cause = do
                     ASSERTING(assertST "literal in reason clause" $ litInClause l c)
 
                     -- resolution of current conflict with the deduction cause
-                    forLitInClause2_ c $ \l' -> insertLitSet l' sandbox
+                    forLitInClause2_ c insertSandbox
                     deleteLitSet l       sandbox
                     deleteLitSet (neg l) sandbox
         {-
