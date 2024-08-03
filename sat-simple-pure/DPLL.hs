@@ -776,6 +776,10 @@ backtrack self@Self {..} !cause = do
 
                     clearLitSet units
 
+                    -- boost literals
+                    forLitInClause2_ conflictCause $ \cl ->
+                        weightVarSet (litToVar cl) boost vars
+
                     writeLitTable reasons (neg l) conflictCause
                     pushTrail (neg l) trail
                     unitPropagate self (neg l)
