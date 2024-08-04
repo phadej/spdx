@@ -5,6 +5,7 @@
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module SparseMaxHeap (
     SparseHeap,
+    Weight,
     sizeofSparseHeap,
     newSparseHeap,
     memberSparseHeap,
@@ -17,6 +18,7 @@ module SparseMaxHeap (
     extendSparseHeap,
     drainSparseHeap,
     modifyWeightSparseHeap,
+    scaleWeightsSparseHeap,
 ) where
 
 import Control.Monad            (unless, when)
@@ -24,6 +26,8 @@ import Control.Monad.ST         (ST)
 import Data.Bits
 import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
+
+type Weight = Word
 
 -- import Debug.Trace
 
@@ -41,10 +45,10 @@ data SparseHeap s = SH
     { size   :: {-# UNPACK #-} !(PrimVar s Int)
     , dense  :: {-# UNPACK #-} !(MutablePrimArray s Int)
     , sparse :: {-# UNPACK #-} !(MutablePrimArray s Int)
-    , weight :: {-# UNPACK #-} !(MutablePrimArray s Int)
+    , weight :: {-# UNPACK #-} !(MutablePrimArray s Word)
     }
 
-le :: Int -> Int -> Int -> Int -> Bool
+le :: Int -> Weight -> Int -> Weight -> Bool
 le _ !u _y !v = u >= v
 {-
 le !x !u !y !v = u >= v
@@ -209,7 +213,7 @@ insertSparseHeap heap@SH {..} x = checking "insert" heap $ do
 -- >>> runST $ do { set <- newSparseHeap 100; deleteSparseHeap set 10; elemsSparseHeap set }
 -- []
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> fromIntegral $ 100 - x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; deleteSparseHeap set 10; elemsSparseHeap set }
 -- [3,5,7,11,13]
@@ -275,7 +279,7 @@ swap' !dense !sparse !i !x !j !y  = do
     writePrimArray sparse y i
 
 -- sift down
-sink :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Int  -> Int -> Int -> Int -> ST s ()
+sink :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Weight  -> Int -> Int -> Weight -> ST s ()
 sink !n !dense !sparse !weight !i !x !u
     | k < n
     = do
@@ -324,7 +328,7 @@ sink !n !dense !sparse !weight !i !x !u
     !k = j + 1
 
 -- sift up
-swim :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Int  -> Int -> Int -> Int -> ST s ()
+swim :: Int -> MutablePrimArray s Int -> MutablePrimArray s Int -> MutablePrimArray s Weight  -> Int -> Int -> Weight -> ST s ()
 swim !_n !dense !sparse !weight !i !x !u
     | i <= 0
     = return ()
@@ -342,14 +346,14 @@ swim !_n !dense !sparse !weight !i !x !u
 
 -- | Modify weight of the element.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> fromIntegral $ 100 - x) >> insertSparseHeap heap x;
 -- >>> let populate heap = mapM_ (insert heap) [5,3,7,11,13,11]
 -- >>> let populate' heap = mapM_ (insertSparseHeap heap) [5,3,7,11,13,11]
 --
 -- >>> runST $ do { heap <- newSparseHeap 100; populate heap; popSparseHeap heap }
 -- Just 3
 --
--- >>> runST $ do { heap <- newSparseHeap 100; populate heap; modifyWeightSparseHeap heap 3 (\_ -> - 100); popSparseHeap heap }
+-- >>> runST $ do { heap <- newSparseHeap 100; populate heap; modifyWeightSparseHeap heap 3 (\_ -> 0); popSparseHeap heap }
 -- Just 5
 --
 -- Weight are preserved even if element is not in the heap at the moment
@@ -357,7 +361,7 @@ swim !_n !dense !sparse !weight !i !x !u
 -- >>> runST $ do { heap <- newSparseHeap 100; modifyWeightSparseHeap heap 7 (\_ -> 100); populate' heap; popSparseHeap heap }
 -- Just 7
 --
-modifyWeightSparseHeap :: forall s. SparseHeap s -> Int -> (Int -> Int) -> ST s ()
+modifyWeightSparseHeap :: forall s. SparseHeap s -> Int -> (Weight -> Weight) -> ST s ()
 modifyWeightSparseHeap heap@SH {..} !x f = checking "modify" heap $ do
     u' <- readPrimArray weight x
     let !u = f u'
@@ -374,7 +378,7 @@ modifyWeightSparseHeap heap@SH {..} !x f = checking "modify" heap $ do
             if x == x' then balance n i u u' else return ()
         else return ()
   where
-    balance :: Int -> Int -> Int -> Int -> ST s ()
+    balance :: Int -> Int -> Weight -> Weight -> ST s ()
     balance !n !i !u !u'
         | u >= u'
         = swim n dense sparse weight i x u
@@ -383,9 +387,20 @@ modifyWeightSparseHeap heap@SH {..} !x f = checking "modify" heap $ do
         = sink n dense sparse weight i x u
 {-# INLINE modifyWeightSparseHeap #-}
 
+scaleWeightsSparseHeap :: forall s. SparseHeap s -> (Weight -> Weight) -> ST s ()
+scaleWeightsSparseHeap heap@SH{..} f = checking "scale" heap $ do
+    !capacity <- getSizeofMutablePrimArray weight
+    go capacity 0
+  where
+    go !n !i
+        | i >= n    = return ()
+        | otherwise = do
+            u <- readPrimArray weight i
+            writePrimArray weight i (f u)
+
 -- | Pop element from the heap.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - fromIntegral x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { heap <- newSparseHeap 100; mapM_ (insert heap) [5,3,7,11,13,11]; popSparseHeap heap }
 -- Just 3
@@ -449,7 +464,7 @@ elemsSparseHeap SH {..} = do
 
 -- | Drain element from the heap.
 --
--- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - x) >> insertSparseHeap heap x;
+-- >>> let insert heap x = modifyWeightSparseHeap heap x (\_ -> - fromIntegral x) >> insertSparseHeap heap x;
 --
 -- >>> runST $ do { set <- newSparseHeap 100; mapM_ (insert set) [3,5,7,11,13,11]; drainSparseHeap set }
 -- [3,5,7,11,13]
