@@ -18,6 +18,9 @@ import SparseSet
 
 newtype LitSet s = LS (SparseSet s)
 
+indexLitSet :: forall s. LitSet s -> Int -> ST s Lit
+indexLitSet (LS xs) i = coerce (indexSparseSet @s xs i)
+
 newLitSet :: Int -> ST s (LitSet s)
 newLitSet n = LS <$> newSparseSet n
 

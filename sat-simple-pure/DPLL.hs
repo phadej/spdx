@@ -34,12 +34,13 @@ import Data.List    (nub)
 import Data.STRef   (STRef, newSTRef, readSTRef, writeSTRef)
 
 import Data.Primitive.PrimArray (indexPrimArray, primArrayFromList, readPrimArray, sizeofPrimArray)
-import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar)
+import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar, newPrimVar, modifyPrimVar)
 
 import DPLL.Base
 import DPLL.Boost
 import DPLL.Clause2
 import DPLL.LBool
+import DPLL.Level
 import DPLL.LitSet
 import DPLL.LitTable
 import DPLL.LitVar
@@ -372,6 +373,12 @@ data Self s = Self
     { clauseDB :: !(ClauseDB s)
       -- ^ clause database
 
+    , level    :: !(PrimVar s Level)
+      -- ^ current decision level
+
+    , levels   :: !(Levels s)
+      -- ^ decision levels of literals
+
     , pa       :: !(PartialAssignment s)
       -- ^ current partial assignment
 
@@ -405,6 +412,8 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     vars     <- readSTRef variables
 
     litCount <- readSTRef nextLit
+    level    <- newPrimVar (Level 0)
+    levels   <- newLevels litCount
     units    <- newLitSet litCount
     reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
@@ -431,6 +440,8 @@ restart self@Self {..} l = do
     copyPartialAssignment pa prev
 
     unwind trail
+    writePrimVar level (Level 0)
+    clearLevels levels
 
     clearLitSet units
     insertLitSet l units
@@ -455,6 +466,7 @@ restart self@Self {..} l = do
                 l' <- readPrimArray ls i
                 unsetLiteral self l'
                 go (i + 1) n
+
 
 setLiteral1 :: Self s -> Lit -> ST s ()
 setLiteral1 Self {..} l = do
@@ -482,8 +494,10 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
         LUndef -> do
+            lvl <- readPrimVar level
             setLiteral1 self l
             pushTrail l trail
+            setLevel levels l lvl
             ASSERTING_BIND(c, readLitTable reasons l)
             ASSERTING(assertST "reason is not null" (not (isNullClause c)))
             unitPropagate self l
@@ -511,7 +525,11 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
 
         setLiteral2 self l'
         writeLitTable reasons l' nullClause
+        lvl <- readPrimVar level
+        let !lvl' = succ lvl
+        writePrimVar level lvl'
         pushTrail l' trail
+        setLevel levels l lvl'
         unitPropagate self l'
       where
         !l = varToLit v
@@ -577,6 +595,8 @@ unitPropagate self@Self {..} !l  = do
                         insertPartialAssignment (neg u) pa
                         deleteVarSet (litToVar u) vars
                         pushTrail (neg u) trail
+                        lvl <- readPrimVar level
+                        setLevel levels l (succ lvl)
 
                         backtrack self c
                     else do
@@ -641,17 +661,42 @@ traceCause sandbox = do
     traceM $ "current cause " ++ show xs
 #endif
 
+withTwoLargestLevels :: LitSet s -> Int -> Levels s -> (Level -> Level -> ST s r) -> ST s r
+withTwoLargestLevels !sandbox !conflictSize !levels kont = do
+    assertST "n >= 2" (conflictSize >= 2)
+    d1 <- indexLitSet sandbox 0 >>= getLevel levels
+    d2 <- indexLitSet sandbox 1 >>= getLevel levels
+    if d2 >= d1
+    then go d1 d2 2
+    else go d2 d1 2
+  where
+    go d1 d2 i
+        | i >= conflictSize = kont d1 d2
+        | otherwise = do
+            d <- indexLitSet sandbox i >>= getLevel levels
+            if d > d2 then go d2 d (i + 1)
+            else if d > d1 then go d d2 (i + 1)
+            else go d1 d2 (i + 1)
+
+
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
     incrStatsConflicts stats
     scaleVarSet vars decay
 
-    let Trail size _ = trail
-    TRACING(traceTrail reasons trail)
-    clearLitSet sandbox
-    forLitInClause2_ cause insertSandbox
-    TRACING(traceCause sandbox)
-    go False size
+    lvl <- readPrimVar level
+
+    TRACING(traceM $ "Current decision level " ++ show lvl)
+
+    if isZeroLevel lvl
+    then return False
+    else do
+        let Trail size _ = trail
+        TRACING(traceTrail reasons levels trail)
+        clearLitSet sandbox
+        forLitInClause2_ cause insertSandbox
+        TRACING(traceCause sandbox)
+        go False size
    where
     insertSandbox :: Lit -> ST s ()
     insertSandbox !l = do
@@ -694,6 +739,7 @@ backtrack self@Self {..} !cause = do
 
                     TRACING(traceCause sandbox)
                     conflictSize <- sizeofLitSet sandbox
+
                     case conflictSize of
                         1 -> unsingletonLitSet sandbox >>= \l' -> restart self l'
                         _ -> do
@@ -703,7 +749,11 @@ backtrack self@Self {..} !cause = do
                             --     conflictCause <- litSetToClause sandbox
                             --     case conflictCause of
                             --         MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
-                            go True size
+
+                            withTwoLargestLevels sandbox conflictSize levels $ \d1 d2 -> do
+                                -- lvl <- readPrimVar level
+                                -- traceM $ "UIP? " ++ show (lvl, d1, d2)
+                                go True size
 
                 else do
                     -- TODO: assertConflict
@@ -715,8 +765,9 @@ backtrack self@Self {..} !cause = do
             else do
                 TRACING(traceM ("backtrack decide " ++ show l))
                 TRACING(traceCause sandbox)
-                TRACING(traceTrail reasons trail)
+                TRACING(traceTrail reasons levels trail)
                 ASSERTING(assertLiteralInPartialAssignment l pa)
+                modifyPrimVar level pred
 
                 b <- memberLitSet sandbox (neg l)
                 if b
@@ -750,7 +801,9 @@ backtrack self@Self {..} !cause = do
                     forLitInClause2_ conflictCause boost'
 
                     writeLitTable reasons (neg l) conflictCause
+                    lvl <- readPrimVar level
                     pushTrail (neg l) trail
+                    setLevel levels (neg l) lvl
                     unitPropagate self (neg l)
 
                 else do

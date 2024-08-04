@@ -68,6 +68,7 @@ library sat-simple-pure
     DPLL.Boost
     DPLL.Clause2
     DPLL.LBool
+    DPLL.Level
     DPLL.LitSet
     DPLL.LitTable
     DPLL.LitVar

@@ -8,6 +8,7 @@ import Data.Primitive.PrimVar   (PrimVar, newPrimVar, readPrimVar, writePrimVar)
 
 import DPLL.Base
 import DPLL.Clause2
+import DPLL.Level
 import DPLL.LitTable
 import DPLL.LitVar
 
@@ -36,8 +37,8 @@ pushTrail l (Trail size ls) = do
     writePrimVar size (n + 1)
     writePrimArray ls n l
 
-traceTrail :: forall s. LitTable s Clause2 -> Trail s -> ST s ()
-traceTrail reasons (Trail size lits) = do
+traceTrail :: forall s. LitTable s Clause2 -> Levels s -> Trail s -> ST s ()
+traceTrail reasons levels (Trail size lits) = do
     n <- readPrimVar size
     out <- go 0 n
     traceM $ unlines $ "=== Trail ===" : out
@@ -50,11 +51,12 @@ traceTrail reasons (Trail size lits) = do
         | otherwise
         = do
             l <- readPrimArray lits i
+            Level d <- getLevel levels l
             c <- readLitTable reasons l
             ls <- go (i + 1) n
             if isNullClause c
-            then return ((showString "Decided " . showsPrec 11 l) "" : ls)
-            else return ((showString "Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
+            then return ((showChar '@' . shows d . showString " Decided " . showsPrec 11 l) "" : ls)
+            else return ((showChar '@' . shows d . showString " Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
 
 assertEmptyTrail :: HasCallStack => Trail s -> ST s ()
 assertEmptyTrail (Trail size _) = do

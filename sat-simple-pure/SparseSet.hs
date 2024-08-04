@@ -2,6 +2,7 @@
 module SparseSet (
     SparseSet (..),
     sizeofSparseSet,
+    indexSparseSet,
     newSparseSet,
     memberSparseSet,
     insertSparseSet,
@@ -67,6 +68,9 @@ newSparseSet capacity' = do
     dense <- newPrimArray capacity
     sparse <- newPrimArray capacity
     return SS {..}
+    
+indexSparseSet :: SparseSet s -> Int -> ST s Int
+indexSparseSet SS {..} i = readPrimArray dense i
 
 -- | Size of sparse set.
 --
