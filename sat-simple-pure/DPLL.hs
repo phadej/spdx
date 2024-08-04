@@ -45,6 +45,7 @@ import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray
 import Data.Primitive.PrimVar   (PrimVar, newPrimVar, writePrimVar, readPrimVar)
 
 import LCG
+import DPLL.Boost
 import DPLL.Clause2
 import DPLL.LBool
 import DPLL.LitSet
@@ -396,16 +397,6 @@ newLit Solver {..} = do
     insertVarSet (litToVar l) vars'
 
     return l
-
-boost :: Word -> Word
-boost !n =
-    let !m = n + 64
-    in if m < n then maxBound else m
-{-# INLINE [1] boost #-}
-
-decay :: Word -> Word
-decay !n = n - unsafeShiftR n 6
-{-# INLINE [1] decay #-}
 
 boostScore :: Solver s -> Lit -> ST s ()
 boostScore Solver {..} l = do

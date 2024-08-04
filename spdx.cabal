@@ -64,6 +64,7 @@ library sat-simple-pure
     Assert
     Control.Monad.SAT
     DPLL
+    DPLL.Boost
     DPLL.Clause2
     DPLL.LBool
     DPLL.LitSet
