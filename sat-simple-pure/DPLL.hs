@@ -131,8 +131,8 @@ tracePartialAssignment (PA arr) = do
         | i < n
         , let l = MkLit (var_to_lit i)
         = readByteArray @Word8 arr i >>= \case
-          0x0 -> go n (neg l : acc) (i + 1)
-          0x1 -> go n (    l : acc) (i + 1)
+          0x0 -> go n (    l : acc) (i + 1)
+          0x1 -> go n (neg l : acc) (i + 1)
           _   -> go n          acc  (i + 1)
 
         | otherwise
@@ -523,6 +523,9 @@ data Self s = Self
     , prev     :: !(PartialAssignment s)
       -- ^ previous partial assignment
 
+    , zero     :: !(PartialAssignment s)
+      -- ^ ground partial assignment
+
     , units    :: !(LitSet s)
       -- ^ unit literals to be processed
 
@@ -552,6 +555,8 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
     prev     <- newPartialAssignment litCount
+    zero     <- newPartialAssignment litCount
+    copyPartialAssignment pa zero
     trail    <- newTrail litCount
     let stats = statistics
 
@@ -576,6 +581,8 @@ restart self@Self {..} l = do
     insertLitSet l units
     res <- initialLoop clauseDB units vars pa
     TRACING(traceM ("restart propagation result: " ++ show res))
+
+    copyPartialAssignment pa zero
 
     ASSERTING(assertEmptyTrail trail)
     if res
@@ -792,7 +799,11 @@ backtrack self@Self {..} !cause = do
     go False size
    where
     insertSandbox :: Lit -> ST s ()
-    insertSandbox !l = insertLitSet l sandbox
+    insertSandbox !l = do
+        lookupPartialAssignment l zero >>= \case
+            LTrue  -> error "should no happen"
+            LUndef -> insertLitSet l sandbox
+            LFalse -> insertLitSet l sandbox -- return () -- TODO: seems to be pessimisation atm
     {-# INLINE [1] insertSandbox #-}
 
     go :: Bool -> PrimVar s Int -> ST s Bool
