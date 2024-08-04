@@ -680,41 +680,50 @@ unitPropagate self@Self {..} !l  = do
             solveLoop self
 
         | otherwise
-        = readVec watches i >>= \ w@(W l' c) ->
-            let kontUnitPropagate = \case
-                    Conflicting_      -> do
-                        writeVec watches j w
-                        copy watches (i + 1) (j + 1) size
-                        backtrack self c
+        = readVec watches i >>= \ w@(W l' c) -> do
+            let onConflict :: ST s Bool
+                {-# INLINE onConflict #-}
+                onConflict = do
+                    writeVec watches j w
+                    copy watches (i + 1) (j + 1) size
+                    backtrack self c
 
-                    Satisfied_        -> do
-                        writeVec watches j w
+                onSatisfied :: ST s Bool
+                {-# INLINE onSatisfied #-}
+                onSatisfied = do
+                    writeVec watches j w
+                    go watches (i + 1) (j + 1) size
+
+                onUnit :: Lit -> ST s Bool
+                {-# INLINE onUnit #-}
+                onUnit u = do
+                    writeVec watches j w
+                    foundUnitClause self u c
+
+                    isNeg <- memberLitSet units (neg u)
+                    -- for now this is pessimisation,
+                    -- as we don't learn from these conflicts.
+                    -- (enabling it increases the conflicts)
+                    if isNeg && False
+                    then do
+                        -- c1 <- readLitTable reasons u
+                        -- c2 <- readLitTable reasons (neg u)
+                        -- traceM $ "there is neg: " ++ show (l, u, c, c1, c2)
+
+                        copy watches (i + 1) (j + 1) size
+
+                        insertPartialAssignment (neg u) pa
+                        deleteVarSet (litToVar u) vars
+                        pushTrail (neg u) trail
+
+                        backtrack self c
+                    else do
                         go watches (i + 1) (j + 1) size
 
-                    Unit_ u           -> do
-                        writeVec watches j w
-                        foundUnitClause self u c
-
-                        isNeg <- memberLitSet units (neg u)
-                        -- for now this is pessimisation,
-                        -- as we don't learn from these conflicts.
-                        -- (enabling it increases the conflicts)
-                        if isNeg && False
-                        then do
-                            -- c1 <- readLitTable reasons u
-                            -- c2 <- readLitTable reasons (neg u)
-                            -- traceM $ "there is neg: " ++ show (l, u, c, c1, c2)
-
-                            copy watches (i + 1) (j + 1) size
-
-                            insertPartialAssignment (neg u) pa
-                            deleteVarSet (litToVar u) vars
-                            pushTrail (neg u) trail
-
-                            backtrack self c
-                        else do
-                            go watches (i + 1) (j + 1) size
-
+            let kontUnitPropagate = \case
+                    Conflicting_      -> onConflict
+                    Satisfied_        -> onSatisfied
+                    Unit_ u           -> onUnit u
                     Unresolved_ l1 l2
                         | l2 /= l', l2 /= l
                         -> do
@@ -730,7 +739,8 @@ unitPropagate self@Self {..} !l  = do
                         -> error ("watch" ++ show (l, l1, l2, l'))
 
                 {-# INLINE [1] kontUnitPropagate #-}
-            in satisfied2_ pa c kontUnitPropagate
+
+            satisfied2_ pa c kontUnitPropagate
 
     copy :: Vec s Watch -> Int -> Int -> Int -> ST s ()
     copy watches i j size = do

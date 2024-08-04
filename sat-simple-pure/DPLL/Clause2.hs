@@ -13,6 +13,9 @@ litInClause :: Lit -> Clause2 -> Bool
 litInClause l (MkClause2 l1 l2 ls) =
     l == l1 || l == l2 || foldrPrimArray (\l' next -> l' == l || next) False ls
 
+isBinaryClause2 :: Clause2 -> Bool
+isBinaryClause2 (MkClause2 _ _ ls) = sizeofPrimArray ls == 0
+
 forLitInClause2_ :: Clause2 -> (Lit -> ST s ()) -> ST s ()
 forLitInClause2_ (MkClause2 l1 l2 ls) f = do
     f l1
