@@ -657,7 +657,7 @@ backtrack self@Self {..} !cause = do
         lookupPartialAssignment l zero >>= \case
             LTrue  -> error "should no happen"
             LUndef -> insertLitSet l sandbox
-            LFalse -> insertLitSet l sandbox -- return () -- TODO: seems to be pessimisation atm
+            LFalse -> return ()
     {-# INLINE [1] insertSandbox #-}
 
     go :: Bool -> PrimVar s Int -> ST s Bool
@@ -732,6 +732,32 @@ backtrack self@Self {..} !cause = do
                         incrStatsLearnt stats
                         case conflictCause of
                             MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
+
+                    when (notFirst && 2 < conflictSize) $ do
+                        incrStatsLearnt stats
+                        -- traceM $ "conflict size: " ++ show (neg l, conflictSize, conflictCause)
+                        -- traceTrail reasons trail
+                        let l1 = neg l
+                        ASSERTING(assertST "l1" (litInClause l1 conflictCause))
+                        let Trail _ trailLits = trail
+                        let aux !i = do
+                                when (i < 0) $ do
+                                    -- traceM $ "conflict size: " ++ show (neg l, conflictSize, conflictCause)
+                                    -- tracePartialAssignment pa
+                                    -- traceTrail reasons trail
+                                    traceM "error"
+                                -- assertST "i >= 0" (i >= 0)
+
+                                tl <- readPrimArray trailLits i
+                                if litInClause (neg tl) conflictCause
+                                then return (neg tl)
+                                else aux (i - 1)
+
+                        l2 <- aux (n - 2)
+                        ASSERTING(assertST "l2" (litInClause l2 conflictCause))
+
+                        insertClauseDB l1 l2 conflictCause clauseDB
+                        return ()
 
                     -- TODO: toggleLiteral self pa
                     deletePartialAssignment l pa
