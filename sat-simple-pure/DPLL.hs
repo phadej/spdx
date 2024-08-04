@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MagicHash                  #-}
-{-# LANGUAGE NoFieldSelectors           #-}
-{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE CPP              #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE MagicHash        #-}
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE RecordWildCards  #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module DPLL (
     Solver,
@@ -28,124 +28,42 @@ module DPLL (
 
 #define TWO_WATCHED_LITERALS
 
-import Control.Monad        (forM_, when)
-import Control.Monad.ST     (ST)
-import Data.Bits            (testBit, unsafeShiftR)
-import Data.Functor         ((<&>))
-import Data.List            (nub)
-import Data.STRef           (STRef, newSTRef, readSTRef, writeSTRef)
-import Data.Word            (Word8)
+import Data.Functor ((<&>))
+import Data.List    (nub)
+import Data.STRef   (STRef, newSTRef, readSTRef, writeSTRef)
 
-import Data.Primitive.ByteArray
-       (MutableByteArray (..), getSizeofMutableByteArray, newByteArray, readByteArray, resizeMutableByteArray,
-       shrinkMutableByteArray, writeByteArray, fillByteArray, copyMutableByteArray)
-import Data.Primitive.PrimArray
-       (indexPrimArray, primArrayFromList, sizeofPrimArray)
-import Data.Primitive.PrimArray (MutablePrimArray, readPrimArray, writePrimArray, newPrimArray)
-import Data.Primitive.PrimVar   (PrimVar, newPrimVar, writePrimVar, readPrimVar)
+import Data.Primitive.PrimArray (indexPrimArray, primArrayFromList, readPrimArray, sizeofPrimArray)
+import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar)
 
-import LCG
+import DPLL.Base
 import DPLL.Boost
 import DPLL.Clause2
 import DPLL.LBool
 import DPLL.LitSet
 import DPLL.LitTable
 import DPLL.LitVar
+import DPLL.PartialAssignment
 import DPLL.Stats
+import DPLL.Trail
 import DPLL.VarSet
+import LCG
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
 #endif
 
 #ifdef ENABLE_TRACE
-import Debug.Trace
 #define TRACING(x) x
 #else
 #define TRACING(x)
 #endif
 
 #ifdef ENABLE_ASSERTS
-import Assert
-import GHC.Stack
 #define ASSERTING(x) x
+#define ASSERTING_BIND(x,y) x <- y
 #else
 #define ASSERTING(x)
-#endif
-
-import Debug.Trace
-
--------------------------------------------------------------------------------
--- Partial Assignment
--------------------------------------------------------------------------------
-
-newtype PartialAssignment s = PA (MutableByteArray s)
-
-newPartialAssignment :: Int -> ST s (PartialAssignment s)
-newPartialAssignment size = do
-    arr <- newByteArray (min 4096 size)
-    shrinkMutableByteArray arr size
-    fillByteArray arr 0 size 0xff
-    return (PA arr)
-
-copyPartialAssignment :: PartialAssignment s -> PartialAssignment s -> ST s ()
-copyPartialAssignment (PA src) (PA tgt) = do
-    n <- getSizeofMutableByteArray src
-    m <- getSizeofMutableByteArray tgt
-    let size = min n m
-    copyMutableByteArray tgt 0 src 0 size
-
-extendPartialAssignment :: PartialAssignment s -> ST s (PartialAssignment s)
-extendPartialAssignment (PA arr) = do
-    size <- getSizeofMutableByteArray arr
-    arr' <- resizeMutableByteArray arr (size + 1)
-    writeByteArray arr' size (0xff :: Word8)
-    return (PA arr')
-
-lookupPartialAssignment :: Lit -> PartialAssignment s -> ST s LBool
-lookupPartialAssignment (MkLit l) (PA arr) = do
-    readByteArray @Word8 arr (lit_to_var l) >>= \case
-        0x0 -> return (if y then LFalse else LTrue)
-        0x1 -> return (if y then LTrue else LFalse)
-        _   -> return LUndef
-  where
-    y = testBit l 0
-    {-# INLINE y #-}
-
-insertPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
-insertPartialAssignment (MkLit l) (PA arr) = do
-    ASSERTING(readByteArray arr (lit_to_var l) >>= \x -> assertST "insert" (x == (0xff :: Word8)))
-    writeByteArray arr (lit_to_var l) (if testBit l 0 then 0x1 else 0x0 :: Word8)
-
-deletePartialAssignment :: Lit -> PartialAssignment s -> ST s ()
-deletePartialAssignment (MkLit l) (PA arr) = do
-    writeByteArray arr (lit_to_var l) (0xff :: Word8)
-
-#ifdef ENABLE_TRACE
-tracePartialAssignment :: PartialAssignment s -> ST s ()
-tracePartialAssignment (PA arr) = do
-    n <- getSizeofMutableByteArray arr
-    lits <- go n [] 0
-    traceM $ "PartialAssignment " ++ show lits
-  where
-    go n acc i
-        | i < n
-        , let l = MkLit (var_to_lit i)
-        = readByteArray @Word8 arr i >>= \case
-          0x0 -> go n (    l : acc) (i + 1)
-          0x1 -> go n (neg l : acc) (i + 1)
-          _   -> go n          acc  (i + 1)
-
-        | otherwise
-        = return (reverse acc)
-#endif
-
-#ifdef ENABLE_ASSERTS
-assertLiteralInPartialAssignment :: Lit -> PartialAssignment s -> ST s ()
-assertLiteralInPartialAssignment l pa =
-    lookupPartialAssignment l pa >>= \case
-        LTrue -> return ()
-        x     -> assertST ("lit in partial: " ++ show x) False
+#define ASSERTING_BIND(x,y)
 #endif
 
 -------------------------------------------------------------------------------
@@ -446,61 +364,6 @@ unsat Solver {..} = do
     return False
 
 -------------------------------------------------------------------------------
--- Trail
--------------------------------------------------------------------------------
-
-data Trail s = Trail !(PrimVar s Int) !(MutablePrimArray s Lit)
-
-newTrail :: Int -> ST s (Trail s)
-newTrail capacity = do
-    size <- newPrimVar 0
-    ls <- newPrimArray capacity
-    return (Trail size ls)
-
-popTrail :: Trail s -> ST s Lit
-popTrail (Trail size ls) = do
-    n <- readPrimVar size
-    ASSERTING(assertST "non empty trail" (n >= 1))
-    writePrimVar size (n - 1)
-    readPrimArray ls (n - 1)
-
-pushTrail :: Lit -> Trail s -> ST s ()
-pushTrail l (Trail size ls) = do
-    n <- readPrimVar size
-    writePrimVar size (n + 1)
-    writePrimArray ls n l
-
-#ifdef ENABLE_TRACE
-traceTrail :: forall s. LitTable s Clause2 -> Trail s -> ST s ()
-traceTrail reasons (Trail size ls) = do
-    n <- readPrimVar size
-    out <- go 0 n
-    traceM $ unlines $ "=== Trail ===" : out
-  where
-    go :: Int -> Int -> ST s [String]
-    go i n
-        | i >= n
-        = return ["=== ===== ==="]
-
-        | otherwise
-        = do
-            l <- readPrimArray ls i
-            c <- readLitTable reasons l
-            ls <- go (i + 1) n
-            if isNullClause c
-            then return ((showString "Decided " . showsPrec 11 l) "" : ls)
-            else return ((showString "Deduced " . showsPrec 11 l . showChar ' ' . showsPrec 11 c) "" : ls)
-#endif
-
-#ifdef ENABLE_ASSERTS
-assertEmptyTrail :: HasCallStack => Trail s -> ST s ()
-assertEmptyTrail (Trail size _) = do
-    n <- readPrimVar size
-    ASSERTING (assertST "n == 0" $ n == 0)
-    return ()
-#endif
-
--------------------------------------------------------------------------------
 -- Solving
 -------------------------------------------------------------------------------
 
@@ -620,7 +483,7 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
         LUndef -> do
             setLiteral1 self l
             pushTrail l trail
-            ASSERTING(c <- readLitTable reasons l)
+            ASSERTING_BIND(c, readLitTable reasons l)
             ASSERTING(assertST "reason is not null" (not (isNullClause c)))
             unitPropagate self l
 
@@ -844,7 +707,7 @@ backtrack self@Self {..} !cause = do
                 else do
                     -- TODO: assertConflict
                     TRACING(traceM ("deduced skip " ++ show l))
-                    ASSERTING(conflictCause <- litSetToClause sandbox)
+                    ASSERTING_BIND(conflictCause, litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
                     go True size
 
@@ -894,7 +757,7 @@ backtrack self@Self {..} !cause = do
                     deletePartialAssignment l pa
                     insertVarSet (litToVar l) vars
 
-                    ASSERTING(conflictCause <- litSetToClause sandbox)
+                    ASSERTING_BIND(conflictCause, litSetToClause sandbox)
                     ASSERTING(assertClauseConflicting pa conflictCause)
 
                     go True size

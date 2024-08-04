@@ -64,21 +64,22 @@ library sat-simple-pure
     Assert
     Control.Monad.SAT
     DPLL
+    DPLL.Base
     DPLL.Boost
     DPLL.Clause2
     DPLL.LBool
     DPLL.LitSet
     DPLL.LitTable
     DPLL.LitVar
+    DPLL.PartialAssignment
     DPLL.Stats
+    DPLL.Trail
     DPLL.VarSet
     EST
     LCG
-    Lifted
     SparseHeap
     SparseMaxHeap
     SparseSet
-    UnliftedSTRef
     Vec
 
   build-depends:
