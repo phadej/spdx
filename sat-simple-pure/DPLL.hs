@@ -720,27 +720,33 @@ unitPropagate self@Self {..} !l  = do
                     else do
                         go watches (i + 1) (j + 1) size
 
-            let kontUnitPropagate = \case
-                    Conflicting_      -> onConflict
-                    Satisfied_        -> onSatisfied
-                    Unit_ u           -> onUnit u
-                    Unresolved_ l1 l2
-                        | l2 /= l', l2 /= l
-                        -> do
-                            insertWatch l2 w clauseDB
-                            go watches (i + 1) j size
+            if isBinaryClause2 c
+            then lookupPartialAssignment l' pa >>= \case
+                LUndef -> onUnit l'
+                LTrue  -> onSatisfied
+                LFalse -> onConflict
+            else do
+                let kontUnitPropagate = \case
+                        Conflicting_      -> onConflict
+                        Satisfied_        -> onSatisfied
+                        Unit_ u           -> onUnit u
+                        Unresolved_ l1 l2
+                            | l2 /= l', l2 /= l
+                            -> do
+                                insertWatch l2 w clauseDB
+                                go watches (i + 1) j size
 
-                        | l1 /= l', l1 /= l
-                        -> do
-                            insertWatch l1 w clauseDB
-                            go watches (i + 1) j size
+                            | l1 /= l', l1 /= l
+                            -> do
+                                insertWatch l1 w clauseDB
+                                go watches (i + 1) j size
 
-                        | otherwise
-                        -> error ("watch" ++ show (l, l1, l2, l'))
+                            | otherwise
+                            -> error ("watch" ++ show (l, l1, l2, l'))
 
-                {-# INLINE [1] kontUnitPropagate #-}
+                    {-# INLINE [1] kontUnitPropagate #-}
 
-            satisfied2_ pa c kontUnitPropagate
+                satisfied2_ pa c kontUnitPropagate
 
     copy :: Vec s Watch -> Int -> Int -> Int -> ST s ()
     copy watches i j size = do
