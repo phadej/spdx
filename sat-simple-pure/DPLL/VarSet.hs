@@ -65,9 +65,13 @@ newVarSet = VS <$> newSparseHeap 0
 extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs
 
-weightVarSet :: Var -> (Int -> Int) -> VarSet s -> ST s ()
+weightVarSet :: Var -> (Word -> Word) -> VarSet s -> ST s ()
 weightVarSet (MkVar x) f (VS xs) = modifyWeightSparseHeap xs x f
 {-# INLINE weightVarSet #-}
+
+scaleVarSet :: VarSet s -> (Word -> Word) -> ST s ()
+scaleVarSet (VS xs) f = scaleWeightsSparseHeap xs f
+{-# INLINE scaleVarSet #-}
 
 insertVarSet :: Var -> VarSet s -> ST s ()
 insertVarSet (MkVar x) (VS xs) = do

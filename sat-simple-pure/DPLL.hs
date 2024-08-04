@@ -397,20 +397,20 @@ newLit Solver {..} = do
 
     return l
 
-boost :: Int -> Int
-boost !n
-    | n <= 0    = 1
-    | otherwise = n + 1
+boost :: Word -> Word
+boost !n =
+    let !m = n + 64
+    in if m < n then maxBound else m
 {-# INLINE [1] boost #-}
 
--- decay :: Int -> Int
--- decay n = unsafeShiftR n 1
--- {-# INLINE [1] decay #-}
+decay :: Word -> Word
+decay !n = n - unsafeShiftR n 6
+{-# INLINE [1] decay #-}
 
 boostScore :: Solver s -> Lit -> ST s ()
 boostScore Solver {..} l = do
     vars <- readSTRef variables
-    weightVarSet (litToVar l) (boost . boost . boost) vars
+    weightVarSet (litToVar l) boost vars
 
 addClause :: Solver s -> [Lit] -> ST s Bool
 addClause solver@Solver {..} clause = whenOk ok $ do
@@ -782,6 +782,7 @@ traceCause sandbox = do
 backtrack :: forall s. Self s -> Clause2 -> ST s Bool
 backtrack self@Self {..} !cause = do
     incrStatsConflicts stats
+    scaleVarSet vars decay
 
     let Trail size _ = trail
     TRACING(traceTrail reasons trail)
