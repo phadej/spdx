@@ -5,6 +5,7 @@ module DPLL.Stats (
     readStatsRestarts, incrStatsRestarts,
     readStatsLearnt, incrStatsLearnt,
     readStatsClauses, incrStatsClauses,
+    readStatsLearntLiterals, incrStatsLearntLiterals,
 ) where
 
 import Control.Monad.ST (ST)
@@ -18,9 +19,11 @@ data Stats s = MkStats (MutablePrimArray s Int)
 
 newStats :: ST s (Stats s)
 newStats = MkStats <$> do
-    arr <- newPrimArray 4
-    setPrimArray arr 0 4 0
+    arr <- newPrimArray size
+    setPrimArray arr 0 size 0
     return arr
+  where
+    size = 5
 
 readStatsConflicts :: Stats s -> ST s Int
 incrStatsConflicts :: Stats s -> ST s ()
@@ -38,6 +41,10 @@ readStatsClauses :: Stats s -> ST s Int
 incrStatsClauses :: Stats s -> ST s ()
 (readStatsClauses, incrStatsClauses) = makeStat 3
 
+readStatsLearntLiterals :: Stats s -> ST s Int
+incrStatsLearntLiterals :: Stats s -> Int -> ST s ()
+(readStatsLearntLiterals, incrStatsLearntLiterals) = makeStatBy 4
+
 makeStat :: Int -> (Stats s1 -> ST s1 Int, Stats s2 -> ST s2 ())
 makeStat i = (read_, incr_)
   where
@@ -45,3 +52,11 @@ makeStat i = (read_, incr_)
     incr_ (MkStats arr) = do
         x <- readPrimArray arr i
         writePrimArray arr i (x + 1)
+
+makeStatBy :: Int -> (Stats s1 -> ST s1 Int, Stats s2 -> Int -> ST s2 ())
+makeStatBy i = (read_, incr_)
+  where
+    read_ (MkStats arr) = readPrimArray arr i
+    incr_ (MkStats arr) !n = do
+        x <- readPrimArray arr i
+        writePrimArray arr i (x + n)

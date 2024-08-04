@@ -19,6 +19,7 @@ module DPLL (
     num_vars,
     num_clauses,
     num_learnts,
+    num_learnt_literals,
     num_conflicts,
     num_restarts,
 ) where
@@ -730,6 +731,7 @@ backtrack self@Self {..} !cause = do
                     -- we don't need to worry where to insert the clause in 2WL setup
                     when (notFirst && conflictSize == 2) $ do
                         incrStatsLearnt stats
+                        incrStatsLearntLiterals stats conflictSize
                         case conflictCause of
                             MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
 
@@ -866,6 +868,9 @@ num_clauses Solver {..} = readStatsClauses statistics
 
 num_learnts :: Solver s -> ST s Int
 num_learnts Solver {..} = readStatsLearnt statistics
+
+num_learnt_literals :: Solver s -> ST s Int
+num_learnt_literals Solver {..} = readStatsLearntLiterals statistics
 
 num_conflicts :: Solver s -> ST s Int
 num_conflicts Solver {..} = readStatsConflicts statistics
