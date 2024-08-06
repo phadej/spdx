@@ -37,21 +37,23 @@ main = do
         s1 <- numberOfVariables
         s2 <- numberOfClauses
         s3 <- numberOfLearnts
-        s4 <- numberOfConflicts
-        s5 <- numberOfRestarts
+        s4 <- numberOfLearntLiterals
+        s5 <- numberOfConflicts
+        s6 <- numberOfRestarts
 
-        return (sol, (s1, s2, s3, s4, s5))
+        return (sol, (s1, s2, s3, s4, s5, s6))
 
     case msol of
         Nothing -> putStrLn "No solution"
-        Just (sol, (s1, s2, s3, s4, s5)) -> do
+        Just (sol, (s1, s2, s3, s4, s5, s6)) -> do
             let stats = True
             when stats $ do
-                putStrLn $ "variables: " ++ show s1
-                putStrLn $ "clauses:   " ++ show s2
-                putStrLn $ "learnts:   " ++ show s3
-                putStrLn $ "conflicts: " ++ show s4
-                putStrLn $ "restarts:  " ++ show s5
+                putStrLn $ "variables:        " ++ show s1
+                putStrLn $ "clauses:          " ++ show s2
+                putStrLn $ "learnts clauses:  " ++ show s3
+                putStrLn $ "learnts literals: " ++ show s4
+                putStrLn $ "conflicts:        " ++ show s5
+                putStrLn $ "restarts:         " ++ show s6
 
             putStrLn "Solution:"
             let solution' = decode sol

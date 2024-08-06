@@ -47,6 +47,7 @@ module Control.Monad.SAT (
     numberOfVariables,
     numberOfClauses,
     numberOfLearnts,
+    numberOfLearntLiterals,
     numberOfConflicts,
     numberOfRestarts,
 ) where
@@ -553,6 +554,10 @@ numberOfClauses = SAT $ \s _t _r -> liftST $ DPLL.num_clauses s
 -- | The current number of learnt clauses.
 numberOfLearnts :: SAT s Int
 numberOfLearnts = SAT $ \s _t _r -> liftST $ DPLL.num_learnts s
+
+-- | The current number of learnt literals.
+numberOfLearntLiterals :: SAT s Int
+numberOfLearntLiterals = SAT $ \s _t _r -> liftST $ DPLL.num_learnt_literals s
 
 -- | The current number of conflicts.
 numberOfConflicts :: SAT s Int
