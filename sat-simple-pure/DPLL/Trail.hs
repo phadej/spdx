@@ -24,6 +24,9 @@ newTrail capacity = do
     ls <- newPrimArray capacity
     return (Trail size ls)
 
+indexTrail :: Trail s -> Int -> ST s Lit
+indexTrail (Trail _ ls) i = readPrimArray ls i 
+
 popTrail :: Trail s -> ST s Lit
 popTrail (Trail size ls) = do
     n <- readPrimVar size
