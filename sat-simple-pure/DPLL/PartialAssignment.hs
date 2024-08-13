@@ -80,3 +80,8 @@ assertLiteralInPartialAssignment l pa =
     lookupPartialAssignment l pa >>= \case
         LTrue -> return ()
         x     -> assertST ("lit in partial: " ++ show x) False
+
+assertLiteralUndef :: Lit -> PartialAssignment s -> ST s ()
+assertLiteralUndef l pa =
+    lookupPartialAssignment l pa >>= \x ->
+    assertST ("assertLiteralUndef: " ++ show x) (x == LUndef)

@@ -112,6 +112,8 @@ extendClauseDB cdb@(CDB old) newSize' = do
 
 insertClauseDB :: Lit -> Lit -> Clause2 -> ClauseDB s -> ST s ()
 insertClauseDB !l1 !l2 !clause !cdb = do
+    ASSERTING(assertST "l1" (litInClause l1 clause))
+    ASSERTING(assertST "l2" (litInClause l2 clause))
     insertWatch l1 (W l2 clause) cdb
     insertWatch l2 (W l1 clause) cdb
 
@@ -388,8 +390,8 @@ data Self s = Self
     , zero     :: !(PartialAssignment s)
       -- ^ ground partial assignment
 
-    , units    :: !(LitSet s)
-      -- ^ unit literals to be processed
+    , qhead    :: !(PrimVar s Int)
+      -- ^ unit propsagation head
 
     , vars     :: !(VarSet s)
       -- ^ undecided variables
@@ -414,7 +416,7 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     litCount <- readSTRef nextLit
     level    <- newPrimVar (Level 0)
     levels   <- newLevels litCount
-    units    <- newLitSet litCount
+    qhead    <- newPrimVar 0
     reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
     pa       <- readSTRef solution
@@ -443,6 +445,9 @@ restart self@Self {..} l = do
     writePrimVar level (Level 0)
     clearLevels levels
 
+    writePrimVar qhead 0
+
+    let units = sandbox
     clearLitSet units
     insertLitSet l units
     res <- initialLoop clauseDB units vars pa
@@ -467,19 +472,17 @@ restart self@Self {..} l = do
                 unsetLiteral self l'
                 go (i + 1) n
 
+enqueue :: Self s -> Lit -> Level -> Clause2 -> ST s ()
+enqueue Self {..} l d c = do
+    TRACING(traceM $ "enqueue " ++ show (l, d, c))
+    ASSERTING(assertLiteralUndef l pa)
+    ASSERTING(assertST "enqueue reason" (isNullClause c || litInClause l c))
 
-setLiteral1 :: Self s -> Lit -> ST s ()
-setLiteral1 Self {..} l = do
-    -- TODO: assert l not in pa
-    -- TODO: assert (litToVar l) in vars
     insertPartialAssignment l pa
     deleteVarSet (litToVar l) vars
-
-setLiteral2 :: Self s -> Lit -> ST s ()
-setLiteral2 Self {..} l = do
-    -- TODO: assert l not in pa
-    -- TODO: assert (litToVar l) not in vars
-    insertPartialAssignment l pa
+    writeLitTable reasons l c
+    setLevel levels l d
+    pushTrail l trail
 
 unsetLiteral :: Self s -> Lit -> ST s ()
 unsetLiteral Self {..} l = do
@@ -489,8 +492,22 @@ unsetLiteral Self {..} l = do
     insertVarSet (litToVar l) vars
 
 solveLoop :: forall s. Self s -> ST s Bool
-solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
+solveLoop self@Self {..} = do
+    let Trail sizeVar _ = trail
+    n <- readPrimVar sizeVar
+    i <- readPrimVar qhead
+    if i < n
+    then do
+        -- traceM $ "i < n: " ++ show (i, n)
+        -- traceTrail reasons levels trail
+        l <- indexTrail trail i
+
+        writePrimVar qhead (i + 1)
+        unitPropagate self l
+    else
+        noUnit
   where
+{-
     yesUnit :: Lit -> ST s Bool
     yesUnit !l = lookupPartialAssignment l pa >>= \case
         LUndef -> do
@@ -509,6 +526,7 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
             backtrack self c
 
         LTrue  -> solveLoop self
+-}
 
     noUnit :: ST s Bool
     noUnit = minViewVarSet vars noVar yesVar
@@ -518,29 +536,23 @@ solveLoop self@Self {..} = minViewLitSet units noUnit yesUnit
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
+        -- increase decision level
+        lvl <- readPrimVar level
+        let !lvl' = succ lvl
+        writePrimVar level lvl'
+
         l' <- lookupPartialAssignment l prev <&> \case
             LTrue  -> neg l
             LFalse -> l
             LUndef -> l
 
-        setLiteral2 self l'
-        writeLitTable reasons l' nullClause
-        lvl <- readPrimVar level
-        let !lvl' = succ lvl
-        writePrimVar level lvl'
-        pushTrail l' trail
-        setLevel levels l lvl'
+        enqueue self l' lvl' nullClause 
+
+        -- solve loop
+        modifyPrimVar qhead $ \i -> i + 1
         unitPropagate self l'
       where
         !l = varToLit v
-
-foundUnitClause :: Self s -> Lit -> Clause2 -> ST s ()
-foundUnitClause Self{..} l c = do
-#ifdef ENABLE_ASSERTS
-    -- TODO: literalInClause l c
-#endif
-    insertLitSet l units
-    writeLitTable reasons l c
 
 unitPropagate :: forall s. Self s -> Lit -> ST s Bool
 
@@ -578,29 +590,10 @@ unitPropagate self@Self {..} !l  = do
                 {-# INLINE onUnit #-}
                 onUnit u = do
                     writeVec watches j w
-                    foundUnitClause self u c
 
-                    isNeg <- memberLitSet units (neg u)
-                    -- for now this is pessimisation,
-                    -- as we don't learn from these conflicts.
-                    -- (enabling it increases the conflicts)
-                    if isNeg && False
-                    then do
-                        -- c1 <- readLitTable reasons u
-                        -- c2 <- readLitTable reasons (neg u)
-                        -- traceM $ "there is neg: " ++ show (l, u, c, c1, c2)
-
-                        copy watches (i + 1) (j + 1) size
-
-                        insertPartialAssignment (neg u) pa
-                        deleteVarSet (litToVar u) vars
-                        pushTrail (neg u) trail
-                        lvl <- readPrimVar level
-                        setLevel levels l (succ lvl)
-
-                        backtrack self c
-                    else do
-                        go watches (i + 1) (j + 1) size
+                    lvl <- readPrimVar level
+                    enqueue self u lvl c
+                    go watches (i + 1) (j + 1) size
 
             if isBinaryClause2 c
             then lookupPartialAssignment l' pa >>= \case
@@ -687,6 +680,9 @@ backtrack self@Self {..} !cause = do
     lvl <- readPrimVar level
 
     TRACING(traceM $ "Current decision level " ++ show lvl)
+
+    -- traceM $ "BACKTRACK: " ++ show cause
+    -- traceTrail reasons levels trail
 
     if isZeroLevel lvl
     then return False
@@ -793,8 +789,6 @@ backtrack self@Self {..} !cause = do
                     insertPartialAssignment (neg l) pa
                     ASSERTING(assertClauseSatisfied pa conflictCause)
 
-                    clearLitSet units
-
                     -- boost literals
                     let boost' !cl = weightVarSet (litToVar cl) boost vars
                         {-# INLINE [1] boost' #-}
@@ -804,6 +798,13 @@ backtrack self@Self {..} !cause = do
                     lvl <- readPrimVar level
                     pushTrail (neg l) trail
                     setLevel levels (neg l) lvl
+
+                    let Trail sizeVar _ = trail
+                    readPrimVar sizeVar >>= writePrimVar qhead
+
+                    -- readPrimVar qhead >>= \i -> traceM $ "qhead: " ++ show i 
+                    -- traceTrail reasons levels trail
+
                     unitPropagate self (neg l)
 
                 else do
