@@ -100,6 +100,15 @@ test-suite dpll-test
     , tasty                 ^>=1.5
     , tasty-quickcheck      ^>=0.11
 
+test-suite dpll-small
+  import:         language
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: dpll/test
+  main-is:        dpll-small.hs
+  build-depends:
+    , base
+    , spdx:sat-simple-pure
+
 test-suite test
   import:         language
   type:           exitcode-stdio-1.0
