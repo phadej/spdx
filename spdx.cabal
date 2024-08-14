@@ -73,6 +73,7 @@ library sat-simple-pure
     DPLL.LitTable
     DPLL.LitVar
     DPLL.PartialAssignment
+    DPLL.Satisfied
     DPLL.Stats
     DPLL.Trail
     DPLL.VarSet
