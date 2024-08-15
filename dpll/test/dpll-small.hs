@@ -6,7 +6,9 @@ import System.Exit (exitFailure)
 import DPLL
 
 main :: IO ()
-main = if example1 then exitFailure else return ()
+main = do
+    print example1
+    if example1 then exitFailure else return ()
 
 -- this example is unsat
 example1 :: Bool

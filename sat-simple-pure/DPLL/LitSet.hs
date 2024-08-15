@@ -60,4 +60,5 @@ litSetToClause (LS SS {..}) = do
     l1 <- readPrimArray dense 0
     l2 <- readPrimArray dense 1
     ls <- freezePrimArray dense 2 (n - 2)
-    return $! MkClause2 (coerce l1) (coerce l2) (coercePrimArrayLit ls)
+    -- TODO: learned clauses only
+    return $! MkClause2 True (coerce l1) (coerce l2) (coercePrimArrayLit ls)

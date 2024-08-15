@@ -33,7 +33,7 @@ import Data.Functor ((<&>))
 import Data.List    (nub)
 import Data.STRef   (STRef, newSTRef, readSTRef, writeSTRef)
 
-import Data.Primitive.PrimArray (indexPrimArray, primArrayFromList, readPrimArray, sizeofPrimArray)
+import Data.Primitive.PrimArray (primArrayFromList, readPrimArray)
 import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar, newPrimVar, modifyPrimVar)
 
 import DPLL.Base
@@ -45,10 +45,12 @@ import DPLL.LitSet
 import DPLL.LitTable
 import DPLL.LitVar
 import DPLL.PartialAssignment
+import DPLL.Satisfied
 import DPLL.Stats
 import DPLL.Trail
 import DPLL.VarSet
 import LCG
+import SparseSet
 
 #ifdef TWO_WATCHED_LITERALS
 import Vec
@@ -169,7 +171,7 @@ satisfied !pa = go0 . nub where
         LTrue  -> return Satisfied
         LFalse -> go1 l1 ls
 
-    go2 !l1 !l2 acc []     = return (Unresolved (MkClause2 l1 l2 (primArrayFromList acc)))
+    go2 !l1 !l2 acc []     = return (Unresolved (MkClause2 False l1 l2 (primArrayFromList acc)))
     go2 !l1 !l2 acc (l:ls) = lookupPartialAssignment l pa >>= \case
         LUndef -> go2 l1 l2 (l : acc) ls
         LTrue  -> return Satisfied
@@ -178,70 +180,6 @@ satisfied !pa = go0 . nub where
 -------------------------------------------------------------------------------
 -- Clause2
 -------------------------------------------------------------------------------
-
-data Satisfied_
-    = Satisfied_
-    | Conflicting_
-    | Unit_ !Lit
-    | Unresolved_ !Lit !Lit
-  deriving Show
-
-{-# INLINE satisfied2_ #-}
-satisfied2_ :: PartialAssignment s -> Clause2 -> (Satisfied_ -> ST s r) -> ST s r
-satisfied2_ !pa !(MkClause2 l1 l2 ls) kont = go0
-  where
-    !len = sizeofPrimArray ls
-
-    -- initial state
-    go0 = lookupPartialAssignment l1 pa >>= \case
-        LUndef -> go1
-        LTrue  -> kont Satisfied_
-        LFalse -> go2
-
-    -- l1 -> Undef
-    go1 = lookupPartialAssignment l2 pa >>= \case
-        LUndef -> goTwo l1 l2 0
-        LTrue  -> kont Satisfied_
-        LFalse -> goOne l1 0
-
-    -- l1 -> False
-    go2 = lookupPartialAssignment l2 pa >>= \case
-        LUndef -> goOne l2 0
-        LTrue  -> kont Satisfied_
-        LFalse -> goNone 0
-
-    goNone !i
-        | i >= len
-        = kont Conflicting_
-
-        | otherwise
-        , let !l = indexPrimArray ls i
-        = lookupPartialAssignment l pa >>= \case
-            LUndef -> goOne l (i + 1)
-            LTrue  -> kont Satisfied_
-            LFalse -> goNone (i + 1)
-
-    goOne !k1 !i
-        | i >= len
-        = kont $! Unit_ k1
-
-        | otherwise
-        , let !l = indexPrimArray ls i
-        = lookupPartialAssignment l pa >>= \case
-            LUndef -> goTwo k1 l (i + 1)
-            LTrue  -> kont Satisfied_
-            LFalse -> goOne k1 (i + 1)
-
-    goTwo !k1 !k2 !i
-        | i >= len
-        = kont $! Unresolved_ k1 k2
-
-        | otherwise
-        , let !l = indexPrimArray ls i
-        = lookupPartialAssignment l pa >>= \case
-            LUndef -> goTwo k1 k2 (i + 1)
-            LTrue  -> kont Satisfied_
-            LFalse -> goTwo k1 k2 (i + 1)
 
 #ifdef ENABLE_ASSERTS
 assertClauseConflicting :: PartialAssignment s -> Clause2 -> ST s ()
@@ -337,7 +275,7 @@ addClause solver@Solver {..} clause = whenOk ok $ do
 
                 clauseDB <- readSTRef clauses
 #ifdef TWO_WATCHED_LITERALS
-                let MkClause2 l1 l2 _ = c
+                let MkClause2 _ l1 l2 _ = c
                 insertClauseDB l1 l2 c clauseDB
 #else
                 writeSTRef clauses (c : clauseDB)
@@ -435,43 +373,6 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
         False -> unsat solver
         True  -> return True
 
-restart :: Self s -> Lit -> ST s Bool
-restart self@Self {..} l = do
-    TRACING(traceM ("restart " ++ show l))
-    incrStatsRestarts stats
-    copyPartialAssignment pa prev
-
-    unwind trail
-    writePrimVar level (Level 0)
-    clearLevels levels
-
-    writePrimVar qhead 0
-
-    let units = sandbox
-    clearLitSet units
-    insertLitSet l units
-    res <- initialLoop clauseDB units vars pa
-    TRACING(traceM ("restart propagation result: " ++ show res))
-
-    copyPartialAssignment pa zero
-
-    ASSERTING(assertEmptyTrail trail)
-    if res
-    then solveLoop self
-    else return False
-  where
-    unwind (Trail size ls) = do
-        n <- readPrimVar size
-        writePrimVar size 0
-        go 0 n
-      where
-        go i n
-            | i >= n = return ()
-            | otherwise = do
-                l' <- readPrimArray ls i
-                unsetLiteral self l'
-                go (i + 1) n
-
 enqueue :: Self s -> Lit -> Level -> Clause2 -> ST s ()
 enqueue Self {..} l d c = do
     TRACING(traceM $ "enqueue " ++ show (l, d, c))
@@ -491,11 +392,29 @@ unsetLiteral Self {..} l = do
     deletePartialAssignment l pa
     insertVarSet (litToVar l) vars
 
+boostSandbox :: Self s -> ST s ()
+boostSandbox Self {..} = do
+    n <- readPrimVar size
+    go 0 n
+  where
+    LS SS {..} = sandbox
+
+    go !i !n = when (i < n) $ do
+        l <- readPrimArray dense i
+        weightVarSet (litToVar (MkLit l)) boost vars
+        go (i + 1) n
+
 solveLoop :: forall s. Self s -> ST s Bool
 solveLoop self@Self {..} = do
     let Trail sizeVar _ = trail
     n <- readPrimVar sizeVar
     i <- readPrimVar qhead
+
+    TRACING(traceM $ "!!! SOLVE: " ++ show (i, n))
+    TRACING(tracePartialAssignment zero)
+    TRACING(tracePartialAssignment pa)
+    TRACING(traceTrail reasons levels trail)
+
     if i < n
     then do
         -- traceM $ "i < n: " ++ show (i, n)
@@ -507,35 +426,17 @@ solveLoop self@Self {..} = do
     else
         noUnit
   where
-{-
-    yesUnit :: Lit -> ST s Bool
-    yesUnit !l = lookupPartialAssignment l pa >>= \case
-        LUndef -> do
-            lvl <- readPrimVar level
-            setLiteral1 self l
-            pushTrail l trail
-            setLevel levels l lvl
-            ASSERTING_BIND(c, readLitTable reasons l)
-            ASSERTING(assertST "reason is not null" (not (isNullClause c)))
-            unitPropagate self l
-
-        LFalse -> do
-            c <- readLitTable reasons l
-            -- traceM $ "backtrack unit " ++ show (l, c)
-            -- traceTrail reasons trail
-            backtrack self c
-
-        LTrue  -> solveLoop self
--}
-
     noUnit :: ST s Bool
     noUnit = minViewVarSet vars noVar yesVar
 
     noVar :: ST s Bool
-    noVar = return True
+    noVar = do
+        TRACING(traceM ">>> SOLVE: SAT")
+        return True
 
     yesVar :: Var -> ST s Bool
     yesVar !v = do
+        TRACING(traceM $ ">>> SOLVE: deciding variable " ++ show v)
         -- increase decision level
         lvl <- readPrimVar level
         let !lvl' = succ lvl
@@ -546,7 +447,7 @@ solveLoop self@Self {..} = do
             LFalse -> l
             LUndef -> l
 
-        enqueue self l' lvl' nullClause 
+        enqueue self l' lvl' nullClause
 
         -- solve loop
         modifyPrimVar qhead $ \i -> i + 1
@@ -559,7 +460,14 @@ unitPropagate :: forall s. Self s -> Lit -> ST s Bool
 #ifdef TWO_WATCHED_LITERALS
 
 unitPropagate self@Self {..} !l  = do
-    TRACING(traceM ("unitPropagate " ++ show l))
+    TRACING(traceM ("!!! PROPAGATE " ++ show l))
+
+    ASSERTING(let Trail sizeVar trailLits = trail)
+    ASSERTING(n <- readPrimVar sizeVar)
+    ASSERTING(assertST "trail not empty" $ n > 0)
+    ASSERTING(ll <- indexTrail trail (n - 1))
+    ASSERTING(assertST "end of the trail is the var we propagate" $ l == ll)
+
     watches <- lookupClauseDB (neg l) clauseDB
     size <- sizeofVec watches
     go watches 0 0 size
@@ -647,12 +555,10 @@ unitPropagate self@Self {..} _l = go clauseDB
         Unresolved_ _ _ -> go cs
 #endif
 
-#ifdef ENABLE_TRACE
 traceCause :: LitSet s -> ST s ()
 traceCause sandbox = do
     xs <- elemsLitSet sandbox
     traceM $ "current cause " ++ show xs
-#endif
 
 withTwoLargestLevels :: LitSet s -> Int -> Levels s -> (Level -> Level -> ST s r) -> ST s r
 withTwoLargestLevels !sandbox !conflictSize !levels kont = do
@@ -671,56 +577,46 @@ withTwoLargestLevels !sandbox !conflictSize !levels kont = do
             else if d > d1 then go d d2 (i + 1)
             else go d1 d2 (i + 1)
 
+analyse :: forall s. Self s -> Clause2 -> ST s Level
+analyse Self {..} !cause = do
+    TRACING(traceM $ "!!! ANALYSE: " ++ show cause)
+    let Trail size lits = trail
+    n <- readPrimVar size
+    clearLitSet sandbox
+    forLitInClause2_ cause insertSandbox
+    conflictSize <- sizeofLitSet sandbox
 
-backtrack :: forall s. Self s -> Clause2 -> ST s Bool
-backtrack self@Self {..} !cause = do
-    incrStatsConflicts stats
-    scaleVarSet vars decay
-
-    lvl <- readPrimVar level
-
-    TRACING(traceM $ "Current decision level " ++ show lvl)
-
-    -- traceM $ "BACKTRACK: " ++ show cause
-    -- traceTrail reasons levels trail
-
-    if isZeroLevel lvl
-    then return False
-    else do
-        let Trail size _ = trail
-        TRACING(traceTrail reasons levels trail)
-        clearLitSet sandbox
-        forLitInClause2_ cause insertSandbox
-        TRACING(traceCause sandbox)
-        go False size
-   where
-    insertSandbox :: Lit -> ST s ()
-    insertSandbox !l = do
-        lookupPartialAssignment l zero >>= \case
-            LTrue  -> error "should no happen"
-            LUndef -> insertLitSet l sandbox
-            LFalse -> insertLitSet l sandbox -- return () -- TODO: seems to be pessimisation atm
-    {-# INLINE [1] insertSandbox #-}
-
-    go :: Bool -> PrimVar s Int -> ST s Bool
-    go notFirst size = do
-        n <- readPrimVar size
-        if n <= 0
-        then return False -- end of the trail
-        else do
-            l <- popTrail trail
+    withTwoLargestLevels sandbox conflictSize levels $ \d1 d2 -> do
+        lvl <- readPrimVar level
+        if (d1 < lvl) then return d1 else if (d2 < lvl) then return d2 else go lits n (n - 1)
+  where
+    insertSandbox !l = insertLitSet l sandbox
+    {-# INLINE insertSandbox #-}
+    go !lits !n !i
+        | i >= 0 = do
+            l <- readPrimArray lits i
             c <- readLitTable reasons l
-            if not $ isNullClause c
+
+
+            if isNullClause c
             then do
-                TRACING(traceM ("backtrack deduce " ++ show l))
-                ASSERTING(assertLiteralInPartialAssignment l pa)
-
-                unsetLiteral self l
-
+                TRACING(traceM $ ">>> decided " ++ show (l, c))
                 b <- memberLitSet sandbox (neg l)
                 if b
                 then do
-                    TRACING(traceM ("deduced undo " ++ show l ++ " " ++ show c))
+                    tracePartialAssignment zero
+                    traceCause sandbox
+                    traceTrail reasons levels trail
+                    error $ "decision variable" ++ show (b, n, i, l, c, cause)
+                else
+                    go lits n (i - 1)
+            else do
+                b <- memberLitSet sandbox (neg l)
+                if b
+                then do
+                    TRACING(traceM $ ">>> deduced undo" ++ show (l, c))
+                    TRACING(traceCause sandbox)
+
                     ASSERTING(assertST "literal in reason clause" $ litInClause l c)
 
                     -- resolution of current conflict with the deduction cause
@@ -728,16 +624,11 @@ backtrack self@Self {..} !cause = do
                     deleteLitSet l       sandbox
                     deleteLitSet (neg l) sandbox
 
-                    -- TODO: assertConflict
-                    -- satisfied2_ pa conflictCause $ \case
-                    --     Conflicting_ -> return ()
-                    --     ot           -> assertST (show ot) False
-
                     TRACING(traceCause sandbox)
                     conflictSize <- sizeofLitSet sandbox
 
                     case conflictSize of
-                        1 -> unsingletonLitSet sandbox >>= \l' -> restart self l'
+                        1 -> return (Level 0)
                         _ -> do
                             -- TODO: add when 2WL has specific support for binary clauses
                             -- when (notFirst && conflictSize == 2) $ do
@@ -747,83 +638,156 @@ backtrack self@Self {..} !cause = do
                             --         MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
 
                             withTwoLargestLevels sandbox conflictSize levels $ \d1 d2 -> do
-                                -- lvl <- readPrimVar level
+                                lvl <- readPrimVar level
                                 -- traceM $ "UIP? " ++ show (lvl, d1, d2)
-                                go True size
-
+                                if (d1 < lvl) then return d1 else if (d2 < lvl) then return d2 else go lits n (i - 1)
                 else do
-                    -- TODO: assertConflict
-                    TRACING(traceM ("deduced skip " ++ show l))
-                    ASSERTING_BIND(conflictCause, litSetToClause sandbox)
-                    ASSERTING(assertClauseConflicting pa conflictCause)
-                    go True size
+                    TRACING(traceM $ ">>> decuced skip" ++ show (l, c))
+                    go lits n (i - 1)
 
-            else do
-                TRACING(traceM ("backtrack decide " ++ show l))
-                TRACING(traceCause sandbox)
-                TRACING(traceTrail reasons levels trail)
-                ASSERTING(assertLiteralInPartialAssignment l pa)
-                modifyPrimVar level pred
+        | otherwise
+        = assertST "reached end of trail" False >> error "-"
 
-                b <- memberLitSet sandbox (neg l)
-                if b
-                then do
-                    TRACING(traceM ("decided flip " ++ show l))
-                    conflictCause <- litSetToClause sandbox
-                    let conflictSize = sizeofClause2 conflictCause
-                    TRACING(traceM $ "conflict size " ++ show conflictSize)
-                    ASSERTING(assertClauseConflicting pa conflictCause)
+backjump0 :: forall s. Self s -> ST s Bool
+backjump0 self@Self {..} = do
+    TRACING(traceM $ "!!! BACKJUMP0")
+    TRACING(traceCause sandbox)
+    incrStatsRestarts stats
 
-                    -- learning: when the conflict clause is binary clause
-                    -- we don't need to worry where to insert the clause in 2WL setup
-                    when (notFirst && conflictSize == 2) $ do
-                        incrStatsLearnt stats
-                        incrStatsLearntLiterals stats conflictSize
-                        case conflictCause of
-                            MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
+    -- unwind trail
+    unwindTrail
+    writePrimVar qhead 0
+    writePrimVar level zeroLevel
+    clearLevels levels
 
-                    -- TODO: toggleLiteral self pa
-                    deletePartialAssignment l pa
-                    ASSERTING(assertClauseUnit pa conflictCause)
+    conflictSize <- sizeofLitSet sandbox
+    ASSERTING(assertST "conflict size is not zero" $ conflictSize > 0)
 
-                    insertPartialAssignment (neg l) pa
-                    ASSERTING(assertClauseSatisfied pa conflictCause)
+    l <- case conflictSize of
+        1 -> unsingletonLitSet sandbox
+        _ -> do
+            conflictCause <- litSetToClause sandbox
+            satisfied2_ zero conflictCause $ \case
+                Unit_ l' -> return l'
+                x -> error $ "TODO " ++ show (conflictSize, x)
 
-                    -- boost literals
-                    let boost' !cl = weightVarSet (litToVar cl) boost vars
-                        {-# INLINE [1] boost' #-}
-                    forLitInClause2_ conflictCause boost'
+    TRACING(traceM $ ">>> literal " ++ show l)
 
-                    writeLitTable reasons (neg l) conflictCause
-                    lvl <- readPrimVar level
-                    pushTrail (neg l) trail
-                    setLevel levels (neg l) lvl
+    -- initial propagation
+    let units = sandbox
+    clearLitSet units
+    insertLitSet l units
+    res <- initialLoop clauseDB units vars pa
+    TRACING(traceM (">>> propagation result: " ++ show res))
 
-                    let Trail sizeVar _ = trail
-                    readPrimVar sizeVar >>= writePrimVar qhead
+    copyPartialAssignment pa zero
 
-                    -- readPrimVar qhead >>= \i -> traceM $ "qhead: " ++ show i 
-                    -- traceTrail reasons levels trail
+    ASSERTING(assertEmptyTrail trail)
+    if res
+    then solveLoop self -- TODO: decision
+    else return False
+  where
+    unwindTrail = do
+        n <- readPrimVar size
+        writePrimVar size 0
+        go 0 n
+      where
+        Trail size ls = trail
 
-                    unitPropagate self (neg l)
+        go i n
+            | i >= n = return ()
+            | otherwise = do
+                l' <- readPrimArray ls i
+                unsetLiteral self l'
+                go (i + 1) n
 
-                else do
-                    TRACING(traceM ("decided skip " ++ show l))
-                    -- continue
-                    deletePartialAssignment l pa
-                    insertVarSet (litToVar l) vars
+backjump :: forall s. Self s -> Level -> ST s Bool
+backjump self@Self {..} conflictLevel = do
+    TRACING(traceM $ "!!! BACKJUMP: " ++ show conflictLevel)
+    TRACING(traceCause sandbox)
+    TRACING(traceTrail reasons level trail)
 
-                    ASSERTING_BIND(conflictCause, litSetToClause sandbox)
-                    ASSERTING(assertClauseConflicting pa conflictCause)
+    ASSERTING(assertST "backump level > 0" $ conflictLevel > zeroLevel)
 
-                    go True size
+    writePrimVar level conflictLevel
+
+    let Trail sizeVar _ = trail
+    i <- readPrimVar sizeVar
+    go sizeVar (i - 1)
+  where
+    go sizeVar i = do
+        l <- indexTrail trail i
+        dlvl <- getLevel levels l
+
+        if dlvl == conflictLevel
+        then do
+            TRACING(traceM $ ">>> JUMP: " ++ show (i, l, dlvl, conflictLevel))
+            conflictSize <- sizeofLitSet sandbox
+            ASSERTING(assertST "conflict size >= 2" $ conflictSize >= 2)
+
+            conflictClause <- litSetToClause sandbox
+            TRACING(traceM $ "JUMPED: " ++ show (i, l, dlvl, conflictLevel, conflictClause))
+
+            satisfied2_ pa conflictClause $ \case
+                Unit_ u -> do
+                    writePrimVar sizeVar (i + 1)
+                    writePrimVar qhead (i + 1)
+                    enqueue self u dlvl conflictClause
+
+                    TRACING(traceM $ ">>> JUMPED: " ++ show (i, l, dlvl, conflictLevel, conflictClause, u))
+                    TRACING(tracePartialAssignment pa)
+                    TRACING(traceTrail reasons levels trail)
+
+                    unitPropagate self u
+
+                x -> error $ "TODO _" ++ show (conflictSize, x)
+        else do
+            TRACING(traceM $ ">>> UNDO: " ++ show (i, l, dlvl))
+            unsetLiteral self l
+            go sizeVar (i - 1)
+
+backtrack :: forall s. Self s -> Clause2 -> ST s Bool
+backtrack self@Self {..} !cause = do
+    TRACING(traceM $ "!!! CONFLICT " ++ show cause)
+    TRACING(tracePartialAssignment pa)
+    TRACING(traceTrail reasons levels trail)
+
+    incrStatsConflicts stats
+    scaleVarSet vars decay
+
+    TRACING(lvl <- readPrimVar level)
+    clvl <- analyse self cause
+
+    TRACING(traceM $ ">>> analysed " ++ show (lvl, clvl, cause))
+    TRACING(traceCause sandbox)
+
+    -- learn binary clauses
+    conflictSize <- sizeofLitSet sandbox
+    when (conflictSize == 2) $ do
+        conflictClause <- litSetToClause sandbox
+        incrStatsLearnt stats
+        incrStatsLearntLiterals stats conflictSize
+
+        case conflictClause of
+            MkClause2 _     l1 l2 _ -> insertClauseDB l1 l2 conflictClause clauseDB
+
+    -- boost literals in conflict clause
+    boostSandbox self
+
+    if clvl == Level 0
+    then backjump0 self
+    else backjump self clvl
 
 -------------------------------------------------------------------------------
 -- initial loop
 -------------------------------------------------------------------------------
 
 initialLoop :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> ST s Bool
-initialLoop clauseDB units vars pa = minViewLitSet units noUnit yesUnit
+initialLoop clauseDB units vars pa = do
+    TRACING(traceM $ "!!! INITIAL PROPAGATE")
+    TRACING(tracePartialAssignment pa)
+
+    minViewLitSet units noUnit yesUnit
   where
     noUnit :: ST s Bool
     noUnit = return True

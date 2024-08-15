@@ -20,6 +20,9 @@ instance Enum Level where
     succ (Level l) = Level (l + 1)
     pred (Level l) = Level (l - 1)
 
+zeroLevel :: Level
+zeroLevel = Level 0
+
 isZeroLevel :: Level -> Bool
 isZeroLevel (Level n) = n == 0
 

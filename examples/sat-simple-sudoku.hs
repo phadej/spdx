@@ -75,11 +75,11 @@ initValues = N9
 
     -- We make the problem easier, though DPLL can solve this sudoku given enough time (i.e. minutes).
 
+{-
     (N9 5 3 4 6 7 8 9 1 2)
     (N9 6 7 2 1 9 5 3 4 8)
     (N9 1 9 8 3 4 2 5 6 7)
     (N9 8 5 9 7 6 1 4 2 3)
-{-
     (N9 4 2 6 8 5 3 7 9 1)
     (N9 7 1 3 9 2 4 8 5 6)
     (N9 9 6 1 5 3 7 2 8 4)
@@ -88,11 +88,11 @@ initValues = N9
 -}
 
 {-
+-}
     (N9 5 3 0 0 7 0 0 0 0)
     (N9 6 0 0 1 9 5 0 0 0)
     (N9 0 9 8 0 0 0 0 6 0)
     (N9 8 0 0 0 6 0 0 0 3)
--}
     (N9 4 0 0 8 0 3 0 0 1)
     (N9 7 0 0 0 2 0 0 0 6)
     (N9 0 6 0 0 0 0 2 8 0)
