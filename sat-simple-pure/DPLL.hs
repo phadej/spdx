@@ -49,6 +49,7 @@ import DPLL.Satisfied
 import DPLL.Stats
 import DPLL.Trail
 import DPLL.VarSet
+import DPLL.Utils
 import LCG
 import SparseSet
 
@@ -561,13 +562,8 @@ traceCause sandbox = do
     traceM $ "current cause " ++ show xs
 
 withTwoLargestLevels :: LitSet s -> Int -> Levels s -> (Level -> Level -> ST s r) -> ST s r
-withTwoLargestLevels !sandbox !conflictSize !levels kont = do
-    assertST "n >= 2" (conflictSize >= 2)
-    d1 <- indexLitSet sandbox 0 >>= getLevel levels
-    d2 <- indexLitSet sandbox 1 >>= getLevel levels
-    if d2 >= d1
-    then go d1 d2 2
-    else go d2 d1 2
+withTwoLargestLevels !sandbox !conflictSize !levels kont =
+    go zeroLevel zeroLevel 0
   where
     go d1 d2 i
         | i >= conflictSize = kont d1 d2
@@ -627,20 +623,10 @@ analyse Self {..} !cause = do
                     TRACING(traceCause sandbox)
                     conflictSize <- sizeofLitSet sandbox
 
-                    case conflictSize of
-                        1 -> return (Level 0)
-                        _ -> do
-                            -- TODO: add when 2WL has specific support for binary clauses
-                            -- when (notFirst && conflictSize == 2) $ do
-                            --     incrStatsLearnt stats
-                            --     conflictCause <- litSetToClause sandbox
-                            --     case conflictCause of
-                            --         MkClause2 l1 l2 _ -> insertClauseDB l1 l2 conflictCause clauseDB
-
-                            withTwoLargestLevels sandbox conflictSize levels $ \d1 d2 -> do
-                                lvl <- readPrimVar level
-                                -- traceM $ "UIP? " ++ show (lvl, d1, d2)
-                                if (d1 < lvl) then return d1 else if (d2 < lvl) then return d2 else go lits n (i - 1)
+                    withTwoLargestLevels sandbox conflictSize levels $ \d1 d2 -> do
+                        lvl <- readPrimVar level
+                        -- traceM $ "UIP? " ++ show (lvl, d1, d2)
+                        if (d1 < lvl) then return d1 else if (d2 < lvl) then return d2 else go lits n (i - 1)
                 else do
                     TRACING(traceM $ ">>> decuced skip" ++ show (l, c))
                     go lits n (i - 1)
@@ -908,15 +894,3 @@ modelValue Solver {..} l = do
         LUndef -> False
         LTrue  -> True
         LFalse -> False
-
--------------------------------------------------------------------------------
--- utilities
--------------------------------------------------------------------------------
-
-whenOk :: STRef s Bool -> ST s Bool -> ST s Bool
-whenOk ok = whenOk_ (readSTRef ok)
-
-whenOk_ :: ST s Bool -> ST s Bool -> ST s Bool
-whenOk_ ok action = do
-    ok' <- ok
-    if ok' then action else return False

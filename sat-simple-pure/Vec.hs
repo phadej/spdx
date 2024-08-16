@@ -13,6 +13,7 @@ import Control.Monad.ST       (ST)
 import Data.Primitive.Array
 import Data.Primitive.PrimVar
 import Unsafe.Coerce          (unsafeCoerce)
+import DPLL.Utils
 
 data Vec s a = Vec {-# UNPACK #-} !(PrimVar s Int) {-# UNPACK #-} !(MutableArray s a)
 
@@ -20,7 +21,7 @@ newVec
     :: Int             -- ^ capacity
     -> ST s (Vec s a)
 newVec capacity = do
-    arr <- newArray capacity unused
+    arr <- newArray (nextPowerOf2 (max 64 capacity)) unused
     size <- newPrimVar 0
     return (Vec size arr)
 

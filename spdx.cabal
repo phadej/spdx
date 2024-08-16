@@ -132,6 +132,7 @@ library sat-simple-pure
     DPLL.Satisfied
     DPLL.Stats
     DPLL.Trail
+    DPLL.Utils
     DPLL.VarSet
     EST
     LCG

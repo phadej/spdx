@@ -27,6 +27,8 @@ import Data.Bits
 import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
 
+import DPLL.Utils
+
 type Weight = Word
 
 -- import Debug.Trace
@@ -157,8 +159,7 @@ extendSparseHeap
     -> ST s (SparseHeap s)
 extendSparseHeap capacity1 SH {..} = do
     capacity2 <- getSizeofMutablePrimArray dense
-    let capacity' = max capacity2 capacity1 - 1
-    let capacity = unsafeShiftL 1 (finiteBitSize (0 :: Int) - countLeadingZeros capacity')
+    let capacity = nextPowerOf2 (max capacity2 capacity1)
 
     dense' <- resizeMutablePrimArray dense capacity
     sparse' <- resizeMutablePrimArray sparse capacity
