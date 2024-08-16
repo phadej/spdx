@@ -466,7 +466,10 @@ unitPropagate self@Self {..} !l  = do
     ASSERTING(let Trail sizeVar trailLits = trail)
     ASSERTING(n <- readPrimVar sizeVar)
     ASSERTING(assertST "trail not empty" $ n > 0)
-    ASSERTING(ll <- indexTrail trail (n - 1))
+    ASSERTING(q <- readPrimVar qhead)
+    ASSERTING(assertST "qhead" $ q <= n)
+    TRACING(traceM $ show q)
+    ASSERTING(ll <- indexTrail trail (q - 1))
     ASSERTING(assertST "end of the trail is the var we propagate" $ l == ll)
 
     watches <- lookupClauseDB (neg l) clauseDB
@@ -691,7 +694,7 @@ backjump :: forall s. Self s -> Level -> ST s Bool
 backjump self@Self {..} conflictLevel = do
     TRACING(traceM $ "!!! BACKJUMP: " ++ show conflictLevel)
     TRACING(traceCause sandbox)
-    TRACING(traceTrail reasons level trail)
+    TRACING(traceTrail reasons levels trail)
 
     ASSERTING(assertST "backump level > 0" $ conflictLevel > zeroLevel)
 
@@ -717,7 +720,7 @@ backjump self@Self {..} conflictLevel = do
             satisfied2_ pa conflictClause $ \case
                 Unit_ u -> do
                     writePrimVar sizeVar (i + 1)
-                    writePrimVar qhead (i + 1)
+                    writePrimVar qhead (i + 2)
                     enqueue self u dlvl conflictClause
 
                     TRACING(traceM $ ">>> JUMPED: " ++ show (i, l, dlvl, conflictLevel, conflictClause, u))
