@@ -49,6 +49,7 @@ import DPLL.Satisfied
 import DPLL.Stats
 import DPLL.Trail
 import DPLL.VarSet
+import DPLL.Utils
 import LCG
 import SparseSet
 
@@ -893,15 +894,3 @@ modelValue Solver {..} l = do
         LUndef -> False
         LTrue  -> True
         LFalse -> False
-
--------------------------------------------------------------------------------
--- utilities
--------------------------------------------------------------------------------
-
-whenOk :: STRef s Bool -> ST s Bool -> ST s Bool
-whenOk ok = whenOk_ (readSTRef ok)
-
-whenOk_ :: ST s Bool -> ST s Bool -> ST s Bool
-whenOk_ ok action = do
-    ok' <- ok
-    if ok' then action else return False
