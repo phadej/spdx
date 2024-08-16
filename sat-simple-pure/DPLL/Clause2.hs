@@ -1,9 +1,7 @@
 module DPLL.Clause2 where
 
-import Control.Monad            (when)
-import Control.Monad.ST         (ST)
-import Data.Primitive.PrimArray (PrimArray, primArrayToList, emptyPrimArray, foldrPrimArray, indexPrimArray, sizeofPrimArray)
-
+import DPLL.Base
+import DPLL.Prim
 import DPLL.LitVar
 
 data Clause2 = MkClause2 !Bool {-# UNPACK #-} !Lit {-# UNPACK #-} !Lit {-# UNPACK #-} !(PrimArray Lit)

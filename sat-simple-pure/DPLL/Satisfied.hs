@@ -1,13 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 module DPLL.Satisfied where
 
-import Data.Primitive.PrimArray (sizeofPrimArray, indexPrimArray)
-
 import DPLL.Base
 import DPLL.LitVar
 import DPLL.Clause2
 import DPLL.LBool
 import DPLL.PartialAssignment
+import DPLL.Prim
 
 data Satisfied_
     = Satisfied_

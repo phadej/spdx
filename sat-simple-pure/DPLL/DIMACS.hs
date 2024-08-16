@@ -25,7 +25,7 @@ import qualified Data.ByteString as BS
 import Control.Monad (forM_, forM)
 import Control.Monad.ST (runST)
 import qualified DPLL
-import Data.Primitive.PrimArray
+import DPLL.Prim
 
 demo :: [[Int]] -> [Int]
 demo clauses = runST $ do

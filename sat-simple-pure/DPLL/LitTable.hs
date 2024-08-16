@@ -1,9 +1,8 @@
 module DPLL.LitTable where
 
-import Control.Monad.ST     (ST)
-import Data.Primitive.Array (MutableArray, newArray, readArray, sizeofMutableArray, writeArray)
-
+import DPLL.Base
 import DPLL.LitVar
+import DPLL.Prim
 
 -------------------------------------------------------------------------------
 -- LitTable
@@ -20,7 +19,11 @@ sizeofLitTable :: LitTable s a -> ST s Int
 sizeofLitTable (LitT arr) = return (sizeofMutableArray arr)
 
 readLitTable :: LitTable s a -> Lit -> ST s a
-readLitTable (LitT xs) (MkLit l) = readArray xs l
+readLitTable (LitT xs) (MkLit l) = do
+    assertST "readLitTable" $ l < sizeofMutableArray xs
+    readArray xs l
 
 writeLitTable :: LitTable s a -> Lit -> a -> ST s ()
-writeLitTable (LitT xs) (MkLit l) x = writeArray xs l x
+writeLitTable (LitT xs) (MkLit l) x = do
+    assertST "readLitTable" $ l < sizeofMutableArray xs
+    writeArray xs l x

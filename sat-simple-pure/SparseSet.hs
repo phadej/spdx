@@ -13,10 +13,10 @@ module SparseSet (
     clearSparseSet,
 ) where
 
-import Control.Monad            (unless)
-import Control.Monad.ST         (ST)
-import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
+
+import DPLL.Prim
+import DPLL.Base
 
 -- $setup
 -- >>> import Control.Monad.ST (runST)
@@ -37,8 +37,7 @@ _invariant SS {..} = do
     capacity  <- getSizeofMutablePrimArray dense
     capacity' <- getSizeofMutablePrimArray sparse
 
-    unless (n <= capacity && capacity == capacity') $
-        error $ "capacities " ++ show (n, capacity, capacity')
+    assertST "capacities" (n <= capacity && capacity == capacity')
 
     go capacity n 0
   where
@@ -47,9 +46,11 @@ _invariant SS {..} = do
         then return ()
         else do
             x <- readPrimArray dense i
-            unless (x < capacity) $ error $ "x < capacity" ++ show (x, capacity)
+            assertST "x < capacity" $ x < capacity
             j <- readPrimArray sparse x
-            unless (i == j) $ error $ "i == j" ++ show (i, j)
+            assertST "i == j" $ i == j
+
+            go capacity n (i + 1)
 
 checkInvariant :: SparseSet s -> ST s ()
 -- checkInvariant = _invariant
@@ -62,8 +63,7 @@ checkInvariant _ = return ()
 newSparseSet
     :: Int -- ^ max integer
     -> ST s (SparseSet s)
-newSparseSet capacity' = do
-    let capacity = max 1024 capacity'
+newSparseSet capacity = do
     size <- newPrimVar 0
     dense <- newPrimArray capacity
     sparse <- newPrimArray capacity

@@ -2,9 +2,8 @@
 module DPLL.LitVar where
 
 import Data.Bits                (complementBit, testBit, unsafeShiftL, unsafeShiftR)
-import Data.Primitive.PrimArray (PrimArray)
-import Data.Primitive.Types     (Prim)
-import Unsafe.Coerce            (unsafeCoerce)
+
+import DPLL.Prim
 
 -------------------------------------------------------------------------------
 -- Literals
@@ -29,7 +28,7 @@ neg (MkLit l) = MkLit (complementBit l 0)
 -- unLit (MkLit l) = l
 
 coercePrimArrayLit :: PrimArray Int -> PrimArray Lit
-coercePrimArrayLit = unsafeCoerce
+coercePrimArrayLit (PrimArray ba) = PrimArray ba
 
 -------------------------------------------------------------------------------
 -- Variables

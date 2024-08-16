@@ -3,10 +3,10 @@ module DPLL.Trail where
 
 #define ASSERTING(x)
 
-import Data.Primitive.PrimArray (MutablePrimArray, newPrimArray, readPrimArray, writePrimArray)
 import Data.Primitive.PrimVar   (PrimVar, newPrimVar, readPrimVar, writePrimVar)
 
 import DPLL.Base
+import DPLL.Prim
 import DPLL.Clause2
 import DPLL.Level
 import DPLL.LitTable

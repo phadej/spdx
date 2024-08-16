@@ -33,13 +33,13 @@ import Data.Functor ((<&>))
 import Data.List    (nub)
 import Data.STRef   (STRef, newSTRef, readSTRef, writeSTRef)
 
-import Data.Primitive.PrimArray (primArrayFromList, readPrimArray)
 import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar, newPrimVar, modifyPrimVar)
 
 import DPLL.Base
 import DPLL.Boost
 import DPLL.Clause2
 import DPLL.LBool
+import DPLL.Prim
 import DPLL.Level
 import DPLL.LitSet
 import DPLL.LitTable
@@ -83,7 +83,7 @@ data Watch = W !Lit !Clause2
 
 newClauseDB :: Int -> ST s (ClauseDB s)
 newClauseDB !size' = do
-    let size = max size' 4096
+    let size = max size' 40960
     arr <- newLitTable size undefined
 
     forM_ [0 .. size - 1] $ \i -> do
@@ -100,6 +100,7 @@ extendClauseDB cdb@(CDB old) newSize' = do
     if newSize <= oldSize
     then return cdb
     else do
+        traceM $ "resize" ++ show newSize
         new <- newLitTable newSize undefined
 
         forM_ [0 .. newSize - 1] $ \i -> do
@@ -466,7 +467,10 @@ unitPropagate self@Self {..} !l  = do
     ASSERTING(let Trail sizeVar trailLits = trail)
     ASSERTING(n <- readPrimVar sizeVar)
     ASSERTING(assertST "trail not empty" $ n > 0)
-    ASSERTING(ll <- indexTrail trail (n - 1))
+    ASSERTING(q <- readPrimVar qhead)
+    ASSERTING(assertST "qhead" $ q <= n)
+    TRACING(traceM $ show q)
+    ASSERTING(ll <- indexTrail trail (q - 1))
     ASSERTING(assertST "end of the trail is the var we propagate" $ l == ll)
 
     watches <- lookupClauseDB (neg l) clauseDB
@@ -551,7 +555,8 @@ unitPropagate self@Self {..} _l = go clauseDB
         Conflicting_    -> backtrack self c
         Satisfied_      -> go cs
         Unit_ u         -> do
-            foundUnitClause self u c
+            lvl <- readPrimVar level
+            enqueue self u lvl c
             go cs
         Unresolved_ _ _ -> go cs
 #endif
@@ -691,7 +696,7 @@ backjump :: forall s. Self s -> Level -> ST s Bool
 backjump self@Self {..} conflictLevel = do
     TRACING(traceM $ "!!! BACKJUMP: " ++ show conflictLevel)
     TRACING(traceCause sandbox)
-    TRACING(traceTrail reasons level trail)
+    TRACING(traceTrail reasons levels trail)
 
     ASSERTING(assertST "backump level > 0" $ conflictLevel > zeroLevel)
 
@@ -717,7 +722,7 @@ backjump self@Self {..} conflictLevel = do
             satisfied2_ pa conflictClause $ \case
                 Unit_ u -> do
                     writePrimVar sizeVar (i + 1)
-                    writePrimVar qhead (i + 1)
+                    writePrimVar qhead (i + 2)
                     enqueue self u dlvl conflictClause
 
                     TRACING(traceM $ ">>> JUMPED: " ++ show (i, l, dlvl, conflictLevel, conflictClause, u))
