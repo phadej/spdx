@@ -4,6 +4,7 @@ module DPLL.Level where
 import DPLL.Base
 import DPLL.LitVar
 import DPLL.Prim
+import DPLL.Utils
 
 newtype Level = Level Int
   deriving stock (Eq, Ord, Show)
@@ -35,10 +36,21 @@ setLevel (Levels levels) (MkLit l) d = do
 clearLevels :: Levels s -> ST s ()
 clearLevels (Levels levels) = do
     size <- getSizeofMutablePrimArray levels
-    setPrimArray levels 0 size (Level 0)
+    setPrimArray levels 0 size zeroLevel
 
 newLevels :: Int -> ST s (Levels s)
 newLevels size = do
     levels <- newPrimArray size
-    setPrimArray levels 0 size (Level 0)
+    setPrimArray levels 0 size zeroLevel
     return (Levels levels)
+
+extendLevels :: Levels s -> Int -> ST s (Levels s)
+extendLevels levels@(Levels old) newCapacity = do
+    oldCapacity <- getSizeofMutablePrimArray old
+    let capacity = nextPowerOf2 (max oldCapacity newCapacity)
+    if capacity <= oldCapacity
+    then return levels
+    else do
+        new <- newPrimArray capacity
+        setPrimArray new 0 capacity zeroLevel
+        return (Levels new)

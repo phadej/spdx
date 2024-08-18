@@ -11,6 +11,7 @@ import DPLL.Clause2
 import DPLL.Level
 import DPLL.LitTable
 import DPLL.LitVar
+import DPLL.Utils
 
 -------------------------------------------------------------------------------
 -- Trail
@@ -23,6 +24,28 @@ newTrail capacity = do
     size <- newPrimVar 0
     ls <- newPrimArray capacity
     return (Trail size ls)
+
+cloneTrail :: Trail s -> ST s (Trail s)
+cloneTrail (Trail size ls) = do
+    capacity <- getSizeofMutablePrimArray ls
+    n <- readPrimVar size
+    size' <- newPrimVar n
+    ls' <- newPrimArray capacity
+    copyMutablePrimArray ls' 0 ls 0 n
+    return (Trail size' ls')
+
+extendTrail :: Trail s -> Int -> ST s (Trail s)
+extendTrail trail@(Trail size ls) newCapacity = do
+    oldCapacity <- getSizeofMutablePrimArray ls
+    let capacity = nextPowerOf2 (max oldCapacity newCapacity)
+    if capacity <= oldCapacity
+    then return trail
+    else do
+        n <- readPrimVar size
+        size' <- newPrimVar n
+        ls' <- newPrimArray capacity
+        copyMutablePrimArray ls' 0 ls 0 n
+        return (Trail size' ls')
 
 indexTrail :: Trail s -> Int -> ST s Lit
 indexTrail (Trail _ ls) i = readPrimArray ls i

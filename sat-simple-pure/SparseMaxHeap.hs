@@ -8,6 +8,7 @@ module SparseMaxHeap (
     Weight,
     sizeofSparseHeap,
     newSparseHeap,
+    cloneSparseHeap,
     memberSparseHeap,
     insertSparseHeap,
     deleteSparseHeap,
@@ -142,6 +143,21 @@ newSparseHeap !capacity' = do
     setPrimArray weight 0 capacity 0
 
     return SH {..}
+
+cloneSparseHeap :: SparseHeap s -> ST s (SparseHeap s)
+cloneSparseHeap SH {..} = do
+    capacity <- getSizeofMutablePrimArray dense
+    
+    size'   <- readPrimVar size >>= newPrimVar
+    dense'  <- resizeMutablePrimArray dense capacity
+    sparse' <- resizeMutablePrimArray sparse capacity
+    weight' <- resizeMutablePrimArray weight capacity
+
+    copyMutablePrimArray dense' 0 dense 0 capacity
+    copyMutablePrimArray sparse' 0 sparse 0 capacity
+    copyMutablePrimArray weight' 0 weight 0 capacity
+
+    return SH { size = size', dense = dense', sparse = sparse', weight = weight' }
 
 -- | Size of sparse heap.
 --

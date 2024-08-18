@@ -22,6 +22,13 @@ newPartialAssignment (max 4096 -> size) = do
     fillByteArray arr 0 size 0xff
     return (PA arr)
 
+clonePartialAssignment :: PartialAssignment s -> ST s (PartialAssignment s)
+clonePartialAssignment (PA old) = do
+    n <- getSizeofMutableByteArray old
+    new <- newByteArray n
+    copyMutableByteArray new 0 old 0 n
+    return (PA new)    
+
 copyPartialAssignment :: PartialAssignment s -> PartialAssignment s -> ST s ()
 copyPartialAssignment (PA src) (PA tgt) = do
     n <- getSizeofMutableByteArray src
