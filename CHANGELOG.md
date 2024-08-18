@@ -3,8 +3,7 @@
 - Support GHC-9.6.5...9.10.1
 - Use better algorithm for expression equivalence and preorder
   (It's still very slow compared to the state of the art SAT solvers:
-   it cannot solve the sudoku example in reasonable time;
-   but it's still a lot faster than the naive algorithm used previously)
+   but it can solve the sudoku example in reasonable time)
 - Remove "Distribution.SPDX.Extra.Internal" module
 
 1
