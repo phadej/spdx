@@ -25,6 +25,9 @@ newtype VarSet s = VS (STRef s IS.IntSet)
 newVarSet :: ST s (VarSet s)
 newVarSet = VS <$> newSTRef IS.empty
 
+cloneVarSet :: VarSet -> ST s (VarSet s)
+cloneVarSet (VS xs) = error "TODO"
+
 sizeofVarSet :: VarSet s -> ST s Int
 sizeofVarSet (VS xs) = IS.size <$> readSTRef xs
 
@@ -61,6 +64,9 @@ sizeofVarSet (VS xs) = sizeofSparseHeap xs
 
 newVarSet :: ST s (VarSet s)
 newVarSet = VS <$> newSparseHeap 0
+
+cloneVarSet :: VarSet s -> ST s (VarSet s)
+cloneVarSet (VS xs) = VS <$> cloneSparseHeap xs
 
 extendVarSet :: Int -> VarSet s -> ST s (VarSet s)
 extendVarSet capacity (VS xs) = VS <$> extendSparseHeap capacity xs

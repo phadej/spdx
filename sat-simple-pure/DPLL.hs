@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE MagicHash        #-}
 {-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards  #-}
 -- {-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-all #-}
 module DPLL (
@@ -211,8 +212,12 @@ assertClauseSatisfied pa c =
 data Solver s = Solver
     { ok         :: !(STRef s Bool)
     , nextLit    :: !(STRef s Int) -- TODO: change to PrimVar
-    , solution   :: !(STRef s (PartialAssignment s))
-    , variables  :: !(STRef s (VarSet s))
+    , zeroLevels :: !(STRef s (Levels s))
+    , zeroHead   :: !(PrimVar s Int)
+    , zeroTrail  :: !(STRef s (Trail s))
+    , zeroPA     :: !(STRef s (PartialAssignment s))
+    , zeroVars   :: !(STRef s (VarSet s))
+    , prevPA     :: !(STRef s (PartialAssignment s))
     , clauses    :: !(STRef s (ClauseDB s))
     , lcg        :: !(LCG s)
     , statistics :: !(Stats s)
@@ -223,9 +228,16 @@ newSolver :: ST s (Solver s)
 newSolver = do
     ok         <- newSTRef True
     nextLit    <- newSTRef 0
-    solution   <- newPartialAssignment 0 >>= newSTRef
-    variables  <- newVarSet >>= newSTRef
     statistics <- newStats
+
+    zeroLevels <- newLevels 1024 >>= newSTRef
+    zeroVars   <- newVarSet >>= newSTRef
+    zeroPA     <- newPartialAssignment 1024 >>= newSTRef
+    zeroHead   <- newPrimVar 0
+    zeroTrail  <- newTrail 1024 >>= newSTRef
+
+    prevPA     <- newPartialAssignment 1024 >>= newSTRef
+
 #ifdef TWO_WATCHED_LITERALS
     clauses    <- newClauseDB 0 >>= newSTRef
 #else
@@ -237,22 +249,31 @@ newSolver = do
 -- | Create fresh literal
 newLit :: Solver s -> ST s Lit
 newLit Solver {..} = do
-    pa <- readSTRef solution
-    pa' <- extendPartialAssignment pa
-    writeSTRef solution pa'
-
     l' <- readSTRef nextLit
-    writeSTRef nextLit (l' + 2)
+    let n = l' + 2
+    writeSTRef nextLit n
     let l = MkLit l'
 
+    levels <- readSTRef zeroLevels
+    levels' <- extendLevels levels n
+    writeSTRef zeroLevels levels'
+
+    pa <- readSTRef zeroPA
+    pa' <- extendPartialAssignment pa
+    writeSTRef zeroPA pa'
+
+    trail <- readSTRef zeroTrail
+    trail' <- extendTrail trail n
+    writeSTRef zeroTrail trail'
+
     -- add unsolved variable.
-    vars <- readSTRef variables
-    vars' <- extendVarSet (unsafeShiftR l' 1 + 1) vars
-    writeSTRef variables vars'
+    vars <- readSTRef zeroVars
+    vars' <- extendVarSet n vars
+    writeSTRef zeroVars vars'
 
 #ifdef TWO_WATCHED_LITERALS
     clauseDB  <- readSTRef clauses
-    clauseDB' <- extendClauseDB clauseDB (l' + 2)
+    clauseDB' <- extendClauseDB clauseDB n
     writeSTRef clauses clauseDB'
 #endif
 
@@ -262,12 +283,12 @@ newLit Solver {..} = do
 
 boostScore :: Solver s -> Lit -> ST s ()
 boostScore Solver {..} l = do
-    vars <- readSTRef variables
+    vars <- readSTRef zeroVars
     weightVarSet (litToVar l) boost vars
 
 addClause :: Solver s -> [Lit] -> ST s Bool
 addClause solver@Solver {..} clause = whenOk ok $ do
-        pa <- readSTRef solution
+        pa <- readSTRef zeroPA
         s <- satisfied pa clause
         case s of
             Satisfied    -> return True
@@ -288,13 +309,19 @@ addClause solver@Solver {..} clause = whenOk ok $ do
             Unit l -> do
                 TRACING(traceM $ "addClause unit: " ++ show l)
 
-                litCount <- readSTRef nextLit
                 clauseDB <- readSTRef clauses
-                vars <- readSTRef variables
-                units <- newLitSet litCount
-                insertLitSet l units
+                let qhead = zeroHead
 
-                res <- initialLoop clauseDB units vars pa
+                levels <- readSTRef zeroLevels
+                trail  <- readSTRef zeroTrail
+                vars   <- readSTRef zeroVars
+
+                -- insert new literal
+                initialEnqueue trail pa levels vars l
+
+                -- propagate
+                res <- initialLoop clauseDB qhead trail levels pa vars
+
                 if res
                 then return True
                 else unsat solver
@@ -304,7 +331,7 @@ unsat Solver {..} = do
     writeSTRef ok False
     -- TODO: cleanup clauses
     -- writeSTRef clauses []
-    readSTRef variables >>= clearVarSet
+    readSTRef zeroVars >>= clearVarSet
     return False
 
 -------------------------------------------------------------------------------
@@ -314,6 +341,8 @@ unsat Solver {..} = do
 data Self s = Self
     { clauseDB :: !(ClauseDB s)
       -- ^ clause database
+
+    -- TODO: add variable size
 
     , level    :: !(PrimVar s Level)
       -- ^ current decision level
@@ -348,22 +377,28 @@ data Self s = Self
     , stats :: !(Stats s)
     }
 
+assertSelfInvariants :: Self s -> ST s ()
+assertSelfInvariants _ = return ()
+
 solve :: Solver s -> ST s Bool
 solve solver@Solver {..} = whenOk_ (simplify solver) $ do
     clauseDB <- readSTRef clauses
-    vars     <- readSTRef variables
 
     litCount <- readSTRef nextLit
     level    <- newPrimVar (Level 0)
-    levels   <- newLevels litCount
-    qhead    <- newPrimVar 0
-    reasons  <- newLitTable litCount nullClause
     sandbox  <- newLitSet litCount
-    pa       <- readSTRef solution
+    reasons  <- newLitTable litCount nullClause
+
+    zero     <- readSTRef zeroPA
+
+    levels   <- readSTRef zeroLevels
+    qhead    <- readPrimVar zeroHead >>= newPrimVar
+    vars     <- readSTRef zeroVars >>= cloneVarSet
+    pa       <- readSTRef zeroPA >>= clonePartialAssignment
+    trail    <- readSTRef zeroTrail >>= cloneTrail
+
     prev     <- newPartialAssignment litCount
-    zero     <- newPartialAssignment litCount
-    copyPartialAssignment pa zero
-    trail    <- newTrail litCount
+    
     let stats = statistics
 
     TRACING(sizeofVarSet vars >>= \n -> traceM $ "vars to solve " ++ show n)
@@ -373,7 +408,16 @@ solve solver@Solver {..} = whenOk_ (simplify solver) $ do
 
     solveLoop self >>= \case
         False -> unsat solver
-        True  -> return True
+        True  -> do
+            writeSTRef prevPA pa
+            return True
+
+initialEnqueue :: Trail s -> PartialAssignment s -> Levels s -> VarSet s -> Lit -> ST s ()
+initialEnqueue trail pa levels vars l = do
+    insertPartialAssignment l pa
+    deleteVarSet (litToVar l) vars
+    setLevel levels l zeroLevel
+    pushTrail l trail
 
 enqueue :: Self s -> Lit -> Level -> Clause2 -> ST s ()
 enqueue Self {..} l d c = do
@@ -383,9 +427,10 @@ enqueue Self {..} l d c = do
 
     insertPartialAssignment l pa
     deleteVarSet (litToVar l) vars
-    writeLitTable reasons l c
-    setLevel levels l d
     pushTrail l trail
+    setLevel levels l d
+    writeLitTable reasons l c
+    
 
 unsetLiteral :: Self s -> Lit -> ST s ()
 unsetLiteral Self {..} l = do
@@ -490,7 +535,7 @@ unitPropagate self@Self {..} !l  = do
                 {-# INLINE onConflict #-}
                 onConflict = do
                     writeVec watches j w
-                    copy watches (i + 1) (j + 1) size
+                    copyWatches watches (i + 1) (j + 1) size
                     backtrack self c
 
                 onSatisfied :: ST s Bool
@@ -536,15 +581,15 @@ unitPropagate self@Self {..} !l  = do
 
                 satisfied2_ pa c kontUnitPropagate
 
-    copy :: Vec s Watch -> Int -> Int -> Int -> ST s ()
-    copy watches i j size = do
-        if i < size
-        then do
-            w' <- readVec watches i
-            writeVec watches j w'
-            copy watches (i + 1) (j + 1) size
+copyWatches :: Vec s Watch -> Int -> Int -> Int -> ST s ()
+copyWatches watches i j size = do
+    if i < size
+    then do
+        w' <- readVec watches i
+        writeVec watches j w'
+        copyWatches watches (i + 1) (j + 1) size
 
-        else shrinkVec watches j
+    else shrinkVec watches j
 #else
 
 unitPropagate self@Self {..} _l = go clauseDB
@@ -591,8 +636,11 @@ analyse Self {..} !cause = do
         lvl <- readPrimVar level
         if (d1 < lvl) then return d1 else if (d2 < lvl) then return d2 else go lits n (n - 1)
   where
+
     insertSandbox !l = insertLitSet l sandbox
     {-# INLINE insertSandbox #-}
+
+    go :: MutablePrimArray s Lit -> Int -> Int -> ST s Level
     go !lits !n !i
         | i >= 0 = do
             l <- readPrimArray lits i
@@ -605,11 +653,13 @@ analyse Self {..} !cause = do
                 b <- memberLitSet sandbox (neg l)
                 if b
                 then do
+                    TRACING(traceM $ ">>> decided stop: " ++ show (l, c))
                     tracePartialAssignment zero
                     traceCause sandbox
                     traceTrail reasons levels trail
                     error $ "decision variable" ++ show (b, n, i, l, c, cause)
-                else
+                else do 
+                    TRACING(traceM $ ">>> decided skip: " ++ show (l, c))
                     go lits n (i - 1)
             else do
                 b <- memberLitSet sandbox (neg l)
@@ -643,54 +693,49 @@ backjump0 :: forall s. Self s -> ST s Bool
 backjump0 self@Self {..} = do
     TRACING(traceM $ "!!! BACKJUMP0")
     TRACING(traceCause sandbox)
+    TRACING(traceTrail reasons levels trail)
+    ASSERTING(assertSelfInvariants self)
+
     incrStatsRestarts stats
 
-    -- unwind trail
-    unwindTrail
-    writePrimVar qhead 0
     writePrimVar level zeroLevel
-    clearLevels levels
 
-    conflictSize <- sizeofLitSet sandbox
-    ASSERTING(assertST "conflict size is not zero" $ conflictSize > 0)
-
-    l <- case conflictSize of
-        1 -> unsingletonLitSet sandbox
-        _ -> do
-            conflictCause <- litSetToClause sandbox
-            satisfied2_ zero conflictCause $ \case
-                Unit_ l' -> return l'
-                x -> error $ "TODO " ++ show (conflictSize, x)
-
-    TRACING(traceM $ ">>> literal " ++ show l)
-
-    -- initial propagation
-    let units = sandbox
-    clearLitSet units
-    insertLitSet l units
-    res <- initialLoop clauseDB units vars pa
-    TRACING(traceM (">>> propagation result: " ++ show res))
-
-    copyPartialAssignment pa zero
-
-    ASSERTING(assertEmptyTrail trail)
-    if res
-    then solveLoop self -- TODO: decision
-    else return False
+    i <- readPrimVar sizeVar
+    go (i - 1)
   where
-    unwindTrail = do
-        n <- readPrimVar size
-        writePrimVar size 0
-        go 0 n
-      where
-        Trail size ls = trail
+    Trail sizeVar _ = trail
 
-        go i n
-            | i >= n = return ()
-            | otherwise = do
-                l' <- readPrimArray ls i
-                unsetLiteral self l'
-                go (i + 1) n
+    go :: Int -> ST s Bool
+    go i
+        | i >= 0 = do
+            l <- indexTrail trail i
+            dlvl <- getLevel levels l
+            if dlvl == zeroLevel
+            then done (i + 1)
+            else do
+                unsetLiteral self l
+                go (i - 1)
+        | otherwise = done 0
+
+    done :: Int -> ST s Bool
+    done i = do
+        conflictSize <- sizeofLitSet sandbox
+        u <- case conflictSize of
+            1 -> unsingletonLitSet sandbox
+            _ -> do
+                conflictCause <- litSetToClause sandbox
+                satisfied2_ pa conflictCause $ \case
+                    Unit_ l' -> return l'
+                    x -> error $ "TODO " ++ show (conflictSize, x)
+
+        writePrimVar sizeVar i
+        writePrimVar qhead (i + 1)
+        enqueue self u zeroLevel nullClause
+
+        res <- initialUnitPropagate clauseDB qhead trail levels pa vars u
+        if res
+        then solveLoop self
+        else return False
 
 backjump :: forall s. Self s -> Level -> ST s Bool
 backjump self@Self {..} conflictLevel = do
@@ -773,31 +818,31 @@ backtrack self@Self {..} !cause = do
 -- initial loop
 -------------------------------------------------------------------------------
 
-initialLoop :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> ST s Bool
-initialLoop clauseDB units vars pa = do
-    TRACING(traceM $ "!!! INITIAL PROPAGATE")
+initialLoop :: forall s. ClauseDB s -> PrimVar s Int -> Trail s -> Levels s -> PartialAssignment s -> VarSet s -> ST s Bool
+initialLoop !clauseDB !qhead !trail !levels !pa !vars = do
+    let Trail sizeVar _ = trail
+    n <- readPrimVar sizeVar
+    i <- readPrimVar qhead
+
+    TRACING(traceM $ "!!! INITIAL: " ++ show (i, n))
     TRACING(tracePartialAssignment pa)
 
-    minViewLitSet units noUnit yesUnit
-  where
-    noUnit :: ST s Bool
-    noUnit = return True
+    if i < n
+    then do
+        -- traceM $ "i < n: " ++ show (i, n)
+        -- traceTrail reasons levels trail
+        l <- indexTrail trail i
 
-    yesUnit :: Lit -> ST s Bool
-    yesUnit !l = lookupPartialAssignment l pa >>= \case
-        LTrue  -> initialLoop clauseDB units vars pa
-        LFalse -> return False
-        LUndef -> do
-            insertPartialAssignment l pa
-            deleteVarSet (litToVar l) vars
-            initialUnitPropagate clauseDB units vars pa l
+        writePrimVar qhead (i + 1)
+        initialUnitPropagate clauseDB qhead trail levels pa vars l
 
-initialUnitPropagate :: forall s. ClauseDB s -> LitSet s -> VarSet s -> PartialAssignment s -> Lit -> ST s Bool
-initialUnitPropagate clauseDB units vars pa l = do
+    else return True
+
+initialUnitPropagate :: forall s. ClauseDB s -> PrimVar s Int -> Trail s -> Levels s -> PartialAssignment s -> VarSet s -> Lit -> ST s Bool
+initialUnitPropagate !clauseDB !qhead !trail !levels !pa !vars !l = do
     let _unused = l
     TRACING(traceM ("initialUnitPropagate " ++ show l))
 #ifdef TWO_WATCHED_LITERALS
-    clearClauseDB clauseDB l -- clear literal clauses: they are always true.
     watches <- lookupClauseDB (neg l) clauseDB
     size <- sizeofVec watches
     TRACING(traceM ("initialUnitPropagate watches: " ++ show size))
@@ -808,7 +853,7 @@ initialUnitPropagate clauseDB units vars pa l = do
         | i >= size
         = do
             shrinkVec watches j
-            initialLoop clauseDB units vars pa
+            initialLoop clauseDB qhead trail levels pa vars
 
         | otherwise
         = readVec watches i >>= \ w@(W l' c) ->
@@ -816,12 +861,17 @@ initialUnitPropagate clauseDB units vars pa l = do
       where
         {-# INLINE [1] kontInitialUnitPropagate #-}
         kontInitialUnitPropagate w l' = \case
-            Conflicting_ -> return False
+            Conflicting_ -> do
+                writeVec watches j w
+                copyWatches watches (i + 1) (j + 1) size
+                return False
             Satisfied_ -> do
-                go watches (i + 1) j size
+                writeVec watches j w
+                go watches (i + 1) (j + 1) size
             Unit_ u -> do
-                insertLitSet u units
-                go watches (i + 1) j size
+                writeVec watches j w
+                initialEnqueue trail pa levels vars u
+                go watches (i + 1) (j + 1) size
             Unresolved_ l1 l2
                 | l2 /= l', l2 /= l
                 -> do
@@ -889,12 +939,12 @@ num_restarts Solver {..} = readStatsRestarts statistics
 
 -------------------------------------------------------------------------------
 -- queries
--------------------------------------------------------------------------------
+---------------------------------------- ---------------------------------------
 
 -- | Lookup model value
 modelValue :: Solver s -> Lit -> ST s Bool
 modelValue Solver {..} l = do
-    pa <- readSTRef solution
+    pa <- readSTRef prevPA
     lookupPartialAssignment l pa <&> \case
         LUndef -> False
         LTrue  -> True

@@ -27,6 +27,7 @@ module DPLL.Prim (
     P.sizeofPrimArray,
     freezePrimArray,
     P.emptyPrimArray,
+    copyMutablePrimArray,
     -- * Array
     P.MutableArray,
     P.newArray,
@@ -150,6 +151,19 @@ indexPrimArray arr i
     | not (0 <= i && i < P.sizeofPrimArray arr) = error "indexPrimArray"
 #endif
     | otherwise = P.indexPrimArray arr i
+
+copyMutablePrimArray :: BOUNDS_CHECK_CTX P.Prim a => P.MutablePrimArray s a -> Int -> P.MutablePrimArray s a -> Int -> Int -> ST s ()
+copyMutablePrimArray dst off src off' len = do
+#ifdef DPLL_PRIM_BOUNDS_CHECK
+    n <- P.getSizeofMutablePrimArray dst
+    assertST "copyMutablePrimArray" $ 0 <= off && off < n
+    assertST "copyMutablePrimArray" $ 0 <= (off + len) && (off + len) <= n 
+
+    m <- P.getSizeofMutablePrimArray src
+    assertST "copyMutablePrimArray" $ 0 <= off' && off' < m
+    assertST "copyMutablePrimArray" $ 0 <= (off' + len) && (off' + len) <= m 
+#endif
+    P.copyMutablePrimArray dst off src off' len
 
 -------------------------------------------------------------------------------
 -- Array
