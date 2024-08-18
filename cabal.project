@@ -4,6 +4,12 @@ tests: True
 package spdx
   ghc-options: -Wall
 
+package spdx
+  ghc-options: -fcheck-prim-bounds
+
+package primitive
+  ghc-options: -fcheck-prim-bounds
+
 -- testsuite "benchmarking"
 -- cabal run test -- -p "LicenseEx" --quickcheck-tests 1000 --quickcheck-timeout=1s
 

@@ -21,13 +21,12 @@ module SparseMaxHeap (
     scaleWeightsSparseHeap,
 ) where
 
-import Control.Monad            (unless, when)
-import Control.Monad.ST         (ST)
 import Data.Bits
-import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
 
+import DPLL.Base
 import DPLL.Utils
+import DPLL.Prim
 
 type Weight = Word
 
@@ -157,16 +156,20 @@ extendSparseHeap
     :: Int -- ^ new capacity
     -> SparseHeap s
     -> ST s (SparseHeap s)
-extendSparseHeap capacity1 SH {..} = do
+extendSparseHeap capacity1 heap@SH {..} = do
     capacity2 <- getSizeofMutablePrimArray dense
     let capacity = nextPowerOf2 (max capacity2 capacity1)
 
-    dense' <- resizeMutablePrimArray dense capacity
-    sparse' <- resizeMutablePrimArray sparse capacity
-    weight' <- resizeMutablePrimArray weight capacity
-    setPrimArray weight' capacity2 (capacity - capacity2) 0
+    if capacity <= capacity2
+    then return heap
+    else do
 
-    return SH { size, dense = dense', sparse = sparse', weight = weight' }
+        dense' <- resizeMutablePrimArray dense capacity
+        sparse' <- resizeMutablePrimArray sparse capacity
+        weight' <- resizeMutablePrimArray weight capacity
+        setPrimArray weight' capacity2 (capacity - capacity2) 0
+
+        return SH { size, dense = dense', sparse = sparse', weight = weight' }
 
 -- | Test for membership.
 --

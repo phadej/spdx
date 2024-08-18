@@ -4,13 +4,13 @@ module DPLL.LitSet where
 
 #define ASSERTING(x)
 
-import Data.Primitive.PrimArray (freezePrimArray, readPrimArray)
 import Data.Primitive.PrimVar   (readPrimVar)
 
 import DPLL.Base
 import DPLL.Clause2
 import DPLL.LitVar
 import SparseSet
+import DPLL.Prim
 
 -------------------------------------------------------------------------------
 -- LitSet

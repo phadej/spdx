@@ -33,13 +33,13 @@ import Data.Functor ((<&>))
 import Data.List    (nub)
 import Data.STRef   (STRef, newSTRef, readSTRef, writeSTRef)
 
-import Data.Primitive.PrimArray (primArrayFromList, readPrimArray)
 import Data.Primitive.PrimVar   (PrimVar, readPrimVar, writePrimVar, newPrimVar, modifyPrimVar)
 
 import DPLL.Base
 import DPLL.Boost
 import DPLL.Clause2
 import DPLL.LBool
+import DPLL.Prim
 import DPLL.Level
 import DPLL.LitSet
 import DPLL.LitTable
@@ -83,7 +83,7 @@ data Watch = W !Lit !Clause2
 
 newClauseDB :: Int -> ST s (ClauseDB s)
 newClauseDB !size' = do
-    let size = max size' 4096
+    let size = max size' 40960
     arr <- newLitTable size undefined
 
     forM_ [0 .. size - 1] $ \i -> do
@@ -100,6 +100,7 @@ extendClauseDB cdb@(CDB old) newSize' = do
     if newSize <= oldSize
     then return cdb
     else do
+        traceM $ "resize" ++ show newSize
         new <- newLitTable newSize undefined
 
         forM_ [0 .. newSize - 1] $ \i -> do
@@ -554,7 +555,8 @@ unitPropagate self@Self {..} _l = go clauseDB
         Conflicting_    -> backtrack self c
         Satisfied_      -> go cs
         Unit_ u         -> do
-            foundUnitClause self u c
+            lvl <- readPrimVar level
+            enqueue self u lvl c
             go cs
         Unresolved_ _ _ -> go cs
 #endif

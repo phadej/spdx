@@ -8,8 +8,8 @@ module DPLL.Stats (
     readStatsLearntLiterals, incrStatsLearntLiterals,
 ) where
 
-import Control.Monad.ST         (ST)
-import Data.Primitive.PrimArray
+import DPLL.Base
+import DPLL.Prim
 
 -------------------------------------------------------------------------------
 -- Stats

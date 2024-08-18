@@ -8,12 +8,12 @@ module Vec (
     shrinkVec,
 ) where
 
-import Control.Monad          (forM_)
-import Control.Monad.ST       (ST)
-import Data.Primitive.Array
 import Data.Primitive.PrimVar
 import Unsafe.Coerce          (unsafeCoerce)
+
+import DPLL.Base
 import DPLL.Utils
+import DPLL.Prim
 
 data Vec s a = Vec {-# UNPACK #-} !(PrimVar s Int) {-# UNPACK #-} !(MutableArray s a)
 
@@ -26,7 +26,7 @@ newVec capacity = do
     return (Vec size arr)
 
 unused :: a
-unused = unsafeCoerce ()
+unused = undefined
 
 sizeofVec :: Vec s a -> ST s Int
 sizeofVec (Vec size _) = readPrimVar size

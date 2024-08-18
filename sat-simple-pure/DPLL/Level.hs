@@ -1,13 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module DPLL.Level where
 
-import Control.Monad.ST         (ST)
-import Data.Coerce              (coerce)
-import Data.Primitive.PrimArray
-       (MutablePrimArray, getSizeofMutablePrimArray, newPrimArray, readPrimArray, setPrimArray, writePrimArray)
-import Data.Primitive.Types     (Prim)
-
+import DPLL.Base
 import DPLL.LitVar
+import DPLL.Prim
 
 newtype Level = Level Int
   deriving stock (Eq, Ord, Show)

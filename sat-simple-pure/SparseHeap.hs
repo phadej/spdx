@@ -18,11 +18,11 @@ module SparseHeap (
     drainSparseHeap,
 ) where
 
-import Control.Monad            (unless, when)
-import Control.Monad.ST         (ST)
 import Data.Bits
-import Data.Primitive.PrimArray
 import Data.Primitive.PrimVar
+
+import DPLL.Base
+import DPLL.Prim
 
 -- import Debug.Trace
 
