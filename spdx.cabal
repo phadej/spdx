@@ -17,61 +17,6 @@ extra-source-files:
   CHANGELOG.md
   README.md
 
--- cabal-fmt: glob-files dimacs/**/*.cnf
-extra-source-files:
-  dimacs/bf/bf0432-007.cnf
-  dimacs/bf/bf1355-075.cnf
-  dimacs/bf/bf1355-638.cnf
-  dimacs/bf/bf2670-001.cnf
-  dimacs/bf/ssa0432-003.cnf
-  dimacs/bf/ssa2670-130.cnf
-  dimacs/bf/ssa2670-141.cnf
-  dimacs/bf/ssa6288-047.cnf
-  dimacs/bf/ssa7552-038.cnf
-  dimacs/bf/ssa7552-158.cnf
-  dimacs/bf/ssa7552-159.cnf
-  dimacs/bf/ssa7552-160.cnf
-  dimacs/blocksworld/*.cnf
-  dimacs/blocksworld/anomaly.cnf
-  dimacs/blocksworld/bw_large.a.cnf
-  dimacs/blocksworld/bw_large.b.cnf
-  dimacs/blocksworld/bw_large.c.cnf
-  dimacs/blocksworld/huge.cnf
-  dimacs/blocksworld/medium.cnf
-  dimacs/bmc/bmc-ibm-1.cnf
-  dimacs/bmc/bmc-ibm-2.cnf
-  dimacs/bmc/bmc-ibm-3.cnf
-  dimacs/bmc/bmc-ibm-4.cnf
-  dimacs/bmc/bmc-ibm-5.cnf
-  dimacs/bmc/bmc-ibm-7.cnf
-  dimacs/logistics/logistics.a.cnf
-  dimacs/logistics/logistics.b.cnf
-  dimacs/logistics/logistics.c.cnf
-  dimacs/logistics/logistics.d.cnf
-  dimacs/parity/par16-1-c.cnf
-  dimacs/parity/par16-1.cnf
-  dimacs/parity/par16-2-c.cnf
-  dimacs/parity/par16-2.cnf
-  dimacs/parity/par16-3-c.cnf
-  dimacs/parity/par16-3.cnf
-  dimacs/parity/par16-4-c.cnf
-  dimacs/parity/par16-4.cnf
-  dimacs/parity/par16-5-c.cnf
-  dimacs/parity/par16-5.cnf
-  dimacs/parity/par8-1-c.cnf
-  dimacs/parity/par8-1.cnf
-  dimacs/parity/par8-2-c.cnf
-  dimacs/parity/par8-2.cnf
-  dimacs/parity/par8-3-c.cnf
-  dimacs/parity/par8-3.cnf
-  dimacs/parity/par8-4-c.cnf
-  dimacs/parity/par8-4.cnf
-  dimacs/parity/par8-5-c.cnf
-  dimacs/parity/par8-5.cnf
-  dimacs/phole/hole6.cnf
-  dimacs/phole/hole7.cnf
-  dimacs/phole/hole8.cnf
-
 tested-with:        GHC ==9.6.6 || ==9.8.2 || ==9.10.1
 
 source-repository head
@@ -106,86 +51,11 @@ library
   hs-source-dirs:   src/
   ghc-options:      -Wall
   build-depends:
-    , base                  >=4.18.2.1  && <4.21
-    , Cabal-syntax          ^>=3.10.3.0 || ^>=3.12.1.0
-    , containers            >=0.6.7     && <0.8
-    , spdx:sat-simple-pure
-    , transformers          >=0.6.1.0   && <0.7
-
-library sat-simple-pure
-  import:          language
-  hs-source-dirs:  sat-simple-pure
-  exposed-modules:
-    Assert
-    Control.Monad.SAT
-    DPLL
-    DPLL.Base
-    DPLL.Boost
-    DPLL.Clause2
-    DPLL.DIMACS
-    DPLL.LBool
-    DPLL.Level
-    DPLL.LitSet
-    DPLL.LitTable
-    DPLL.LitVar
-    DPLL.PartialAssignment
-    DPLL.Prim
-    DPLL.Satisfied
-    DPLL.Stats
-    DPLL.Trail
-    DPLL.Utils
-    DPLL.VarSet
-    EST
-    LCG
-    SparseHeap
-    SparseMaxHeap
-    SparseSet
-    Vec
-
-  build-depends:
-    , base        >=4.12.0.0 && <4.21
-    , containers  >=0.6.0.1  && <0.8
-    , primitive   ^>=0.9.0.0
-
-  -- for DIMACS
-  build-depends:
-    , bytestring
-    , parsec
-
-test-suite dpll-test
-  import:         language
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: dpll/test
-  main-is:        dpll-test.hs
-  build-depends:
-    , base
-    , QuickCheck            ^>=2.15.0.1
-    , spdx:sat-simple-pure
-    , tasty                 ^>=1.5
-    , tasty-quickcheck      ^>=0.11
-
-test-suite dpll-small
-  import:         language
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: dpll/test
-  main-is:        dpll-small.hs
-  build-depends:
-    , base
-    , spdx:sat-simple-pure
-
-test-suite dpll-dimacs
-  import:         language
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: dpll/test
-  main-is:        dpll-dimacs.hs
-  build-depends:
-    , base
-    , filepath
-    , minisat
-    , primitive
-    , spdx:sat-simple-pure
-    , tasty                 ^>=1.5
-    , tasty-hunit
+    , base          >=4.18.2.1  && <4.21
+    , Cabal-syntax  ^>=3.10.3.0 || ^>=3.12.1.0
+    , containers    >=0.6.7     && <0.8
+    , puresat       ^>=0.1
+    , transformers  >=0.6.1.0   && <0.7
 
 test-suite test
   import:         language
@@ -214,13 +84,3 @@ benchmark bench
     , QuickCheck        ^>=2.15.0.1
     , spdx
     , tasty-quickcheck  ^>=0.11
-
-test-suite sat-simple-sudoku
-  import:         language
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: examples
-  ghc-options:    -rtsopts
-  main-is:        sat-simple-sudoku.hs
-  build-depends:
-    , base
-    , spdx:sat-simple-pure
