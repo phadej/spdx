@@ -6,7 +6,11 @@ import           Test.Tasty.QuickCheck as QC
 import           Distribution.SPDX
 
 latestLicenseListVersion :: LicenseListVersion
-#if MIN_VERSION_Cabal_syntax(3,12,0)
+#if MIN_VERSION_Cabal_syntax(3,16,0)
+latestLicenseListVersion = LicenseListVersion_3_26
+#elif MIN_VERSION_Cabal_syntax(3,14,0)
+latestLicenseListVersion = LicenseListVersion_3_25
+#elif MIN_VERSION_Cabal_syntax(3,12,0)
 latestLicenseListVersion = LicenseListVersion_3_23
 #else
 latestLicenseListVersion = LicenseListVersion_3_16
